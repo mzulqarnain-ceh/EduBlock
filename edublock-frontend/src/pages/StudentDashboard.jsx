@@ -1,0 +1,814 @@
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { QRCode } from 'react-qr-code';
+import Button from '../components/Button';
+import Card from '../components/Card';
+import { generateCertificatePDF } from '../utils/pdfGenerator';
+import { openTransactionInExplorer } from '../utils/blockchain';
+import { degreesAPI } from '../services/api';
+
+const StudentDashboard = () => {
+    const [showQRModal, setShowQRModal] = useState(false);
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [selectedCert, setSelectedCert] = useState(null);
+    const [user, setUser] = useState(null);
+    const [notification, setNotification] = useState({ show: false, message: '' });
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [sortBy, setSortBy] = useState('date-desc');
+    const [certificates, setCertificates] = useState([]);
+    const [profileData, setProfileData] = useState({
+        name: '',
+        email: '',
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+    });
+
+    // Get user from localStorage
+    useEffect(() => {
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+            setUser(JSON.parse(storedUser));
+        }
+    }, []);
+
+    // Fetch certificates from backend
+    useEffect(() => {
+        const fetchCerts = async () => {
+            try {
+                const res = await degreesAPI.list();
+                const certs = res.data.map(cert => ({
+                    id: cert.id,
+                    studentName: cert.student_name,
+                    courseName: cert.degree_name,
+                    institution: 'EduBlock University',
+                    grade: cert.grade || 'N/A',
+                    issueDate: cert.issue_date,
+                    status: cert.status === 'issued' ? 'Issued' : cert.status === 'revoked' ? 'Revoked' : 'Pending',
+                    hash: cert.blockchain_hash || '',
+                    txHash: cert.tx_hash || '',
+                    txStatus: cert.status === 'issued' ? 'Confirmed' : 'Pending',
+                }));
+                setCertificates(certs);
+            } catch (err) {
+                console.error('Error fetching certificates:', err);
+            }
+        };
+        fetchCerts();
+    }, []);
+
+    const showNotification = (message) => {
+        setNotification({ show: true, message });
+        setTimeout(() => setNotification({ show: false, message: '' }), 3000);
+    };
+
+    const handleUpdateProfile = () => {
+        if (!profileData.name.trim()) {
+            showNotification('Name cannot be empty');
+            return;
+        }
+        if (!profileData.email.trim()) {
+            showNotification('Email cannot be empty');
+            return;
+        }
+        if (profileData.newPassword || profileData.confirmPassword) {
+            if (!profileData.currentPassword) {
+                showNotification('Please enter current password to set a new one');
+                return;
+            }
+            if (profileData.newPassword.length < 6) {
+                showNotification('New password must be at least 6 characters');
+                return;
+            }
+            if (profileData.newPassword !== profileData.confirmPassword) {
+                showNotification('New passwords do not match');
+                return;
+            }
+        }
+        const updatedUser = { ...user, name: profileData.name, email: profileData.email };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+        setProfileData(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
+        showNotification('Profile updated successfully!');
+        setShowProfileModal(false);
+    };
+
+    // Filter and sort certificates
+    const filteredCertificates = certificates
+        .filter(cert => {
+            const matchesSearch =
+                cert.courseName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                cert.institution.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesStatus = statusFilter === 'all' || cert.status === statusFilter;
+            return matchesSearch && matchesStatus;
+        })
+        .sort((a, b) => {
+            switch (sortBy) {
+                case 'date-desc':
+                    return new Date(b.issueDate) - new Date(a.issueDate);
+                case 'date-asc':
+                    return new Date(a.issueDate) - new Date(b.issueDate);
+                case 'name-asc':
+                    return a.courseName.localeCompare(b.courseName);
+                case 'name-desc':
+                    return b.courseName.localeCompare(a.courseName);
+                default:
+                    return 0;
+            }
+        });
+
+    return (
+        <div className="min-h-screen pt-32 pb-20">
+            <div className="container-custom">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6 }}
+                >
+                    {/* Header */}
+                    <div className="mb-12">
+                        <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5 }}
+                        >
+                            <h2 className="text-2xl text-white/80 mb-2">
+                                Hello, <span className="gradient-text font-semibold">{user?.name || 'Student'}!</span> 👋
+                            </h2>
+                        </motion.div>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <h1 className="text-4xl font-bold mb-2">
+                                    My <span className="gradient-text">Certificates</span>
+                                </h1>
+                                <p className="text-white/60">View and manage your earned certificates</p>
+                            </div>
+                            <Button
+                                variant="secondary"
+                                onClick={() => {
+                                    setProfileData({
+                                        name: user?.name || '',
+                                        email: user?.email || '',
+                                        currentPassword: '',
+                                        newPassword: '',
+                                        confirmPassword: '',
+                                    });
+                                    setShowProfileModal(true);
+                                }}
+                            >
+                                👤 My Profile
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                        <Card>
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
+                                    <span className="text-2xl">🎓</span>
+                                </div>
+                                <div>
+                                    <p className="text-white/60 text-sm">Total Certificates</p>
+                                    <p className="text-2xl font-bold">{certificates.length}</p>
+                                </div>
+                            </div>
+                        </Card>
+                        <Card>
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
+                                    <span className="text-2xl">✓</span>
+                                </div>
+                                <div>
+                                    <p className="text-white/60 text-sm">Verified</p>
+                                    <p className="text-2xl font-bold">{certificates.filter(c => c.status === 'Issued').length}</p>
+                                </div>
+                            </div>
+                        </Card>
+                        <Card>
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                                    <span className="text-2xl">⭐</span>
+                                </div>
+                                <div>
+                                    <p className="text-white/60 text-sm">Average Grade</p>
+                                    <p className="text-2xl font-bold">A</p>
+                                </div>
+                            </div>
+                        </Card>
+                    </div>
+
+                    {/* Search and Filter */}
+                    <div className="flex flex-col md:flex-row gap-4 mb-8">
+                        <div className="flex-1">
+                            <input
+                                type="text"
+                                placeholder="🔍 Search by course name or institution..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="input-field w-full"
+                            />
+                        </div>
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="input-field w-full md:w-40"
+                        >
+                            <option value="all">All Status</option>
+                            <option value="Issued">Issued</option>
+                            <option value="Pending">Pending</option>
+                        </select>
+                        <select
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value)}
+                            className="input-field w-full md:w-48"
+                        >
+                            <option value="date-desc">Newest First</option>
+                            <option value="date-asc">Oldest First</option>
+                            <option value="name-asc">Name A-Z</option>
+                            <option value="name-desc">Name Z-A</option>
+                        </select>
+                    </div>
+
+                    {/* Certificates Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredCertificates.map((cert, index) => (
+                            <motion.div
+                                key={cert.id}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.6, delay: index * 0.1 }}
+                            >
+                                <Card className="h-full flex flex-col">
+                                    <div className="flex-1">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="text-3xl">📜</div>
+                                            <div className={`rounded-full px-3 py-1 text-xs font-semibold border ${cert.status === 'Issued'
+                                                ? 'bg-green-500/20 text-green-400 border-green-500'
+                                                : cert.status === 'Pending'
+                                                    ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500'
+                                                    : 'bg-red-500/20 text-red-400 border-red-500'
+                                                }`}>
+                                                {cert.status}
+                                            </div>
+                                        </div>
+                                        <h3 className="text-xl font-bold mb-2">{cert.courseName}</h3>
+                                        <p className="text-white/60 mb-4">{cert.institution}</p>
+                                        <div className="space-y-2 mb-6">
+                                            <div className="flex justify-between">
+                                                <span className="text-white/60 text-sm">Grade:</span>
+                                                <span className="font-semibold">{cert.grade}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-white/60 text-sm">Issued:</span>
+                                                <span className="font-semibold">{cert.issueDate}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-white/60 text-sm">Certificate Hash:</span>
+                                                <p className="font-mono text-xs text-blue-400 break-all">{cert.hash.slice(0, 20)}...{cert.hash.slice(-10)}</p>
+                                            </div>
+                                            <div className="pt-2 border-t border-white/10">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-white/60 text-sm">Transaction Hash:</span>
+                                                    <span className={`text-xs px-2 py-0.5 rounded-full ${cert.txStatus === 'Confirmed'
+                                                        ? 'bg-green-500/20 text-green-400'
+                                                        : 'bg-yellow-500/20 text-yellow-400'
+                                                        }`}>
+                                                        {cert.txStatus}
+                                                    </span>
+                                                </div>
+                                                <p className="font-mono text-xs text-cyan-400 break-all mb-2">
+                                                    {cert.txHash.slice(0, 15)}...{cert.txHash.slice(-10)}
+                                                </p>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(cert.txHash);
+                                                            showNotification('Transaction hash copied!');
+                                                        }}
+                                                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                                                    >
+                                                        📋 Copy
+                                                    </button>
+                                                    <a
+                                                        href={`https://sepolia.etherscan.io/tx/${cert.txHash}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                                                    >
+                                                        🔗 Explorer
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* QR Code */}
+                                    <div className="mb-6 flex justify-center">
+                                        <div className="bg-white p-3 rounded-lg">
+                                            <QRCode
+                                                value={`https://edublock.com/verify/${cert.hash}`}
+                                                size={120}
+                                                level="H"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <Button
+                                            variant="primary"
+                                            size="sm"
+                                            className="w-full"
+                                            onClick={() => {
+                                                setSelectedCert(cert);
+                                                setShowQRModal(true);
+                                            }}
+                                        >
+                                            👁️ View QR Code
+                                        </Button>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    generateCertificatePDF(cert);
+                                                    showNotification('PDF downloaded successfully!');
+                                                }}
+                                            >
+                                                📥 PDF
+                                            </Button>
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setSelectedCert(cert);
+                                                    setShowShareModal(true);
+                                                }}
+                                            >
+                                                🔗 Share
+                                            </Button>
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(cert.hash);
+                                                    showNotification('Certificate hash copied!');
+                                                }}
+                                            >
+                                                📋 Copy
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => openTransactionInExplorer(cert.txHash)}
+                                            >
+                                                ⛓️ Chain
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </Card>
+                            </motion.div>
+                        ))}
+                    </div>
+
+                    {certificates.length === 0 && (
+                        <div className="text-center py-20">
+                            <div className="text-6xl mb-4">📚</div>
+                            <h3 className="text-2xl font-bold mb-2">No Certificates Yet</h3>
+                            <p className="text-white/60">Your earned certificates will appear here</p>
+                        </div>
+                    )}
+                </motion.div>
+            </div>
+
+            {/* QR Code Modal */}
+            {showQRModal && selectedCert && (
+                <div
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                    onClick={() => setShowQRModal(false)}
+                >
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="max-w-md w-full"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <Card>
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold">Certificate QR Code</h2>
+                                <button
+                                    onClick={() => setShowQRModal(false)}
+                                    className="text-white/60 hover:text-white"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="text-center mb-6">
+                                <h3 className="text-lg font-semibold mb-2">{selectedCert.courseName}</h3>
+                                <p className="text-white/60 text-sm">{selectedCert.institution}</p>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-xl mb-6 flex justify-center">
+                                <QRCode
+                                    value={`https://edublock.com/verify/${selectedCert.hash}`}
+                                    size={200}
+                                    level="H"
+                                    includeMargin={true}
+                                />
+                            </div>
+
+                            <div className="bg-white/5 p-4 rounded-lg mb-6">
+                                <p className="text-white/60 text-xs mb-2">Verification Link</p>
+                                <p className="text-blue-400 text-sm break-all font-mono">
+                                    https://edublock.com/verify/{selectedCert.hash}
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Button
+                                    variant="primary"
+                                    className="w-full"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(`https://edublock.com/verify/${selectedCert.hash}`);
+                                        showNotification('Verification link copied!');
+                                    }}
+                                >
+                                    📋 Copy Verification Link
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    className="w-full"
+                                    onClick={() => setShowQRModal(false)}
+                                >
+                                    Close
+                                </Button>
+                            </div>
+                        </Card>
+                    </motion.div>
+                </div>
+            )}
+
+
+            {/* Share Modal */}
+            {showShareModal && selectedCert && (
+                <div
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                    onClick={() => setShowShareModal(false)}
+                >
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="max-w-md w-full"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <Card>
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold">Share Certificate</h2>
+                                <button
+                                    onClick={() => setShowShareModal(false)}
+                                    className="text-white/60 hover:text-white"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="text-center mb-6">
+                                <h3 className="text-lg font-semibold mb-2">{selectedCert.courseName}</h3>
+                                <p className="text-white/60 text-sm">{selectedCert.institution}</p>
+                            </div>
+
+                            <div className="bg-white/5 p-4 rounded-lg mb-6">
+                                <p className="text-white/60 text-xs mb-2">Verification Link</p>
+                                <p className="text-blue-400 text-sm break-all font-mono mb-3">
+                                    {`${window.location.origin}/verify?hash=${selectedCert.hash}`}
+                                </p>
+                                <Button
+                                    variant="primary"
+                                    className="w-full"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(`${window.location.origin}/verify?hash=${selectedCert.hash}`);
+                                        showNotification('Verification link copied!');
+                                    }}
+                                >
+                                    📋 Copy Link
+                                </Button>
+                            </div>
+
+                            <div className="border-t border-white/10 pt-4">
+                                <p className="text-white/60 text-xs mb-3">Share via:</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            const text = `Check out my ${selectedCert.courseName} certificate!`;
+                                            const url = `${window.location.origin}/verify?hash=${selectedCert.hash}`;
+                                            window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+                                        }}
+                                    >
+                                        🐦 Twitter
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            const url = `${window.location.origin}/verify?hash=${selectedCert.hash}`;
+                                            window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`, '_blank');
+                                        }}
+                                    >
+                                        💼 LinkedIn
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            const subject = `My ${selectedCert.courseName} Certificate`;
+                                            const body = `I've earned a certificate in ${selectedCert.courseName}! Verify it here: ${window.location.origin}/verify?hash=${selectedCert.hash}`;
+                                            window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                                        }}
+                                    >
+                                        ✉️ Email
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            const text = `Check out my ${selectedCert.courseName} certificate: ${window.location.origin}/verify?hash=${selectedCert.hash}`;
+                                            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                                        }}
+                                    >
+                                        💬 WhatsApp
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <Button
+                                variant="secondary"
+                                className="w-full mt-4"
+                                onClick={() => setShowShareModal(false)}
+                            >
+                                Close
+                            </Button>
+                        </Card>
+                    </motion.div>
+                </div>
+            )}
+
+            {/* Certificate Details Modal */}
+            {showDetailsModal && selectedCert && (
+                <div
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                    onClick={() => setShowDetailsModal(false)}
+                >
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="max-w-2xl w-full"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <Card>
+                            <div className="flex justify-between items-start mb-6">
+                                <div>
+                                    <h2 className="text-2xl font-bold mb-1">{selectedCert.courseName}</h2>
+                                    <p className="text-white/60">{selectedCert.institution}</p>
+                                </div>
+                                <button
+                                    onClick={() => setShowDetailsModal(false)}
+                                    className="text-white/60 hover:text-white"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {/* Certificate Info */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                                        <span className="text-white/60">Student Name</span>
+                                        <span className="font-semibold">{selectedCert.studentName}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                                        <span className="text-white/60">Grade</span>
+                                        <span className="font-semibold text-amber-400">{selectedCert.grade}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                                        <span className="text-white/60">Issue Date</span>
+                                        <span className="font-semibold">{selectedCert.issueDate}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                                        <span className="text-white/60">Status</span>
+                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${selectedCert.status === 'Issued'
+                                            ? 'bg-green-500/20 text-green-400'
+                                            : 'bg-yellow-500/20 text-yellow-400'
+                                            }`}>
+                                            {selectedCert.status}
+                                        </span>
+                                    </div>
+                                    <div className="p-3 bg-white/5 rounded-lg">
+                                        <span className="text-white/60 text-sm">Certificate Hash</span>
+                                        <p className="font-mono text-xs text-blue-400 break-all mt-1">{selectedCert.hash}</p>
+                                    </div>
+                                    <div className="p-3 bg-white/5 rounded-lg">
+                                        <span className="text-white/60 text-sm">Transaction Hash</span>
+                                        <p className="font-mono text-xs text-blue-400 break-all mt-1">{selectedCert.txHash}</p>
+                                    </div>
+                                </div>
+
+                                {/* QR Code */}
+                                <div className="flex flex-col items-center justify-center">
+                                    <div className="bg-white p-4 rounded-xl mb-4">
+                                        <QRCode
+                                            value={`${window.location.origin}/verify?hash=${selectedCert.hash}`}
+                                            size={180}
+                                            level="H"
+                                        />
+                                    </div>
+                                    <p className="text-white/50 text-sm text-center">Scan to verify certificate</p>
+                                </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+                                <Button
+                                    variant="primary"
+                                    onClick={() => generateCertificatePDF(selectedCert)}
+                                >
+                                    📄 Download PDF
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => {
+                                        setShowDetailsModal(false);
+                                        setShowShareModal(true);
+                                    }}
+                                >
+                                    🔗 Share
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => openTransactionInExplorer(selectedCert.txHash)}
+                                >
+                                    ⛓️ Blockchain
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(selectedCert.hash);
+                                        showNotification('Certificate hash copied!');
+                                    }}
+                                >
+                                    📋 Copy Hash
+                                </Button>
+                            </div>
+                        </Card>
+                    </motion.div>
+                </div>
+            )}
+
+            {/* Notification Toast */}
+            {notification.show && (
+                <motion.div
+                    initial={{ opacity: 0, y: -50 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -50 }}
+                    className="fixed top-24 right-4 z-50"
+                >
+                    <div className="bg-green-500/20 border border-green-500 rounded-lg p-4 flex items-center gap-3 backdrop-blur-md">
+                        <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="text-green-400 font-medium">{notification.message}</span>
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Profile Modal */}
+            {showProfileModal && (
+                <div
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                    onClick={() => setShowProfileModal(false)}
+                >
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="w-full max-w-md"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <Card className="p-4 sm:p-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-bold">👤 My Profile</h2>
+                                <button
+                                    onClick={() => setShowProfileModal(false)}
+                                    className="text-white/60 hover:text-white p-1"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {/* Profile Picture Section - Compact */}
+                            <div className="flex items-center gap-4 mb-4 pb-4 border-b border-white/10">
+                                <div className="w-16 h-16 bg-gradient-to-r from-amber-500 to-emerald-500 rounded-full flex items-center justify-center text-2xl flex-shrink-0">
+                                    {profileData.name ? profileData.name.charAt(0).toUpperCase() : '👤'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-semibold truncate">{profileData.name || 'Student'}</p>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="mt-1 text-xs px-2 py-1"
+                                        onClick={() => showNotification('Photo upload coming soon!')}
+                                    >
+                                        📷 Change Photo
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Profile Form - Compact */}
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="block text-white/60 text-xs mb-1">Full Name</label>
+                                    <input
+                                        type="text"
+                                        value={profileData.name}
+                                        onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+                                        className="input-field w-full py-2 text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-white/60 text-xs mb-1">Email</label>
+                                    <input
+                                        type="email"
+                                        value={profileData.email}
+                                        onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                                        className="input-field w-full py-2 text-sm"
+                                    />
+                                </div>
+
+                                <div className="border-t border-white/10 pt-3">
+                                    <h3 className="font-semibold text-sm mb-2">🔐 Change Password</h3>
+                                    <div className="space-y-2">
+                                        <input
+                                            type="password"
+                                            placeholder="Current Password"
+                                            value={profileData.currentPassword}
+                                            onChange={(e) => setProfileData({ ...profileData, currentPassword: e.target.value })}
+                                            className="input-field w-full py-2 text-sm"
+                                        />
+                                        <input
+                                            type="password"
+                                            placeholder="New Password"
+                                            value={profileData.newPassword}
+                                            onChange={(e) => setProfileData({ ...profileData, newPassword: e.target.value })}
+                                            className="input-field w-full py-2 text-sm"
+                                        />
+                                        <input
+                                            type="password"
+                                            placeholder="Confirm New Password"
+                                            value={profileData.confirmPassword}
+                                            onChange={(e) => setProfileData({ ...profileData, confirmPassword: e.target.value })}
+                                            className="input-field w-full py-2 text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex gap-2 mt-4">
+                                <Button
+                                    variant="primary"
+                                    className="flex-1"
+                                    size="sm"
+                                    onClick={handleUpdateProfile}
+                                >
+                                    💾 Save
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowProfileModal(false)}
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        </Card>
+                    </motion.div>
+                </div>
+            )
+            }
+        </div >
+    );
+};
+
+export default StudentDashboard;
