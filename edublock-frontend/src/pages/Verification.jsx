@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import Button from '../components/Button';
 import Card from '../components/Card';
@@ -15,6 +15,14 @@ const Verification = () => {
     const [showScanner, setShowScanner] = useState(false);
     const [scannerInstance, setScannerInstance] = useState(null);
     const [shareCopied, setShareCopied] = useState(false);
+    const inputRef = useRef(null);
+
+    // Auto-focus the input field on page load
+    useEffect(() => {
+        if (inputRef.current) {
+            inputRef.current.focus();
+        }
+    }, []);
 
     const handleVerify = async () => {
         if (!certificateId.trim()) {
@@ -148,6 +156,7 @@ const Verification = () => {
                                     Certificate ID
                                 </label>
                                 <input
+                                    ref={inputRef}
                                     id="certificateId"
                                     type="text"
                                     value={certificateId}
@@ -155,6 +164,7 @@ const Verification = () => {
                                     onKeyPress={(e) => e.key === 'Enter' && handleVerify()}
                                     placeholder="Enter certificate ID or hash (e.g., 0xabcd1234...)"
                                     className="input-field w-full"
+                                    autoFocus
                                 />
                                 {error && (
                                     <p className="mt-2 text-red-400 text-sm">{error}</p>
@@ -299,6 +309,7 @@ const Verification = () => {
                                             onClick={() => {
                                                 setResult(null);
                                                 setCertificateId('');
+                                                setTimeout(() => inputRef.current?.focus(), 100);
                                             }}
                                         >
                                             🔄 Verify Another Certificate
@@ -428,6 +439,7 @@ const Verification = () => {
                                             onClick={() => {
                                                 setResult(null);
                                                 setCertificateId('');
+                                                setTimeout(() => inputRef.current?.focus(), 100);
                                             }}
                                         >
                                             🔄 Try Another Certificate

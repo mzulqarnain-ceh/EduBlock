@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Button from '../components/Button';
 import Card from '../components/Card';
@@ -13,7 +14,10 @@ const SuperAdminDashboard = () => {
     const [showAddUserModal, setShowAddUserModal] = useState(false);
     const [selectedUniversity, setSelectedUniversity] = useState(null);
     const [notification, setNotification] = useState({ show: false, type: '', message: '' });
-    const [activeTab, setActiveTab] = useState('universities');
+    const [searchParams] = useSearchParams();
+    const validTabs = ['universities', 'users', 'settings', 'analytics'];
+    const initialTab = validTabs.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'universities';
+    const [activeTab, setActiveTab] = useState(initialTab);
 
     // New User Form State
     const [newUser, setNewUser] = useState({
@@ -245,42 +249,27 @@ const SuperAdminDashboard = () => {
 
                     {/* Tab Navigation */}
                     <div className="flex gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
-                        <button
-                            onClick={() => setActiveTab('universities')}
-                            className={`px-4 sm:px-6 py-3 rounded-lg font-semibold transition-all whitespace-nowrap text-sm sm:text-base ${activeTab === 'universities'
-                                ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-black'
-                                : 'bg-white/5 text-white/70 hover:bg-white/10'
-                                }`}
-                        >
-                            🏛️ Universities ({universities.length})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('users')}
-                            className={`px-4 sm:px-6 py-3 rounded-lg font-semibold transition-all whitespace-nowrap text-sm sm:text-base ${activeTab === 'users'
-                                ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-black'
-                                : 'bg-white/5 text-white/70 hover:bg-white/10'
-                                }`}
-                        >
-                            👥 Users ({users.length})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('settings')}
-                            className={`px-4 sm:px-6 py-3 rounded-lg font-semibold transition-all whitespace-nowrap text-sm sm:text-base ${activeTab === 'settings'
-                                ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-black'
-                                : 'bg-white/5 text-white/70 hover:bg-white/10'
-                                }`}
-                        >
-                            ⚙️ Settings
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('analytics')}
-                            className={`px-4 sm:px-6 py-3 rounded-lg font-semibold transition-all whitespace-nowrap text-sm sm:text-base ${activeTab === 'analytics'
-                                ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-black'
-                                : 'bg-white/5 text-white/70 hover:bg-white/10'
-                                }`}
-                        >
-                            📊 Analytics
-                        </button>
+                        {[
+                            { id: 'universities', icon: '🏛️', label: `Universities (${universities.length})` },
+                            { id: 'users', icon: '👥', label: `Users (${users.length})` },
+                            { id: 'settings', icon: '⚙️', label: 'Settings' },
+                            { id: 'analytics', icon: '📊', label: 'Analytics' },
+                        ].map(tab => (
+                            <a
+                                key={tab.id}
+                                href={`/superadmin?tab=${tab.id}`}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    setActiveTab(tab.id);
+                                }}
+                                className={`px-4 sm:px-6 py-3 rounded-lg font-semibold transition-all whitespace-nowrap text-sm sm:text-base cursor-pointer inline-block ${activeTab === tab.id
+                                    ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-black'
+                                    : 'bg-white/5 text-white/70 hover:bg-white/10'
+                                    }`}
+                            >
+                                {tab.icon} {tab.label}
+                            </a>
+                        ))}
                     </div>
 
                     {/* Universities Tab Content */}

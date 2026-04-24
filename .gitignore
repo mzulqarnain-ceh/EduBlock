@@ -1,0 +1,15 @@
+﻿# Python
+__pycache__/
+*.pyc
+venv/
+*.egg-info/
+# Node
+node_modules/
+dist/
+# Environment
+.env
+# Compiled contracts (auto-generated)
+contracts/compiled/
+# OS
+.DS_Store
+Thumbs.db

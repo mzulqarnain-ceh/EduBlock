@@ -60,6 +60,9 @@ export const degreesAPI = {
 
     revoke: (id, reason) =>
         api.post(`/degrees/${id}/revoke`, { reason }),
+
+    delete: (id) =>
+        api.delete(`/degrees/${id}`),
 };
 
 // ==================== VERIFICATION ====================

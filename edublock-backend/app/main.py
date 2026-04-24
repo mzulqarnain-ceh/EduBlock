@@ -141,6 +141,35 @@ def startup():
     finally:
         db.close()
 
+    # ========== BLOCKCHAIN SETUP ==========
+    try:
+        from app.services.blockchain_service import blockchain
+
+        if blockchain.connect():
+            # If no contract address configured, deploy a new one
+            if not settings.CONTRACT_ADDRESS:
+                print("🔗 No contract address found. Deploying new contract...")
+                # Check if compiled files exist, if not compile first
+                from pathlib import Path
+                abi_path = Path(__file__).parent.parent / "contracts" / "compiled" / "EduBlockCertificate_abi.json"
+                if not abi_path.exists():
+                    print("📦 Compiling smart contract...")
+                    from app.services.compile_contract import compile_contract
+                    compile_contract()
+
+                address = blockchain.deploy_contract()
+                if address:
+                    print(f"🔗 Contract deployed! Address: {address}")
+                    print(f"   ➡ Add this to .env: CONTRACT_ADDRESS={address}")
+                else:
+                    print("⚠️  Contract deployment failed. Blockchain features will be limited.")
+            else:
+                print(f"🔗 Contract loaded at: {settings.CONTRACT_ADDRESS}")
+        else:
+            print("⚠️  Blockchain not available. App will work without blockchain features.")
+    except Exception as e:
+        print(f"⚠️  Blockchain setup error: {e}. App will work without blockchain.")
+
 
 @app.get("/")
 def root():

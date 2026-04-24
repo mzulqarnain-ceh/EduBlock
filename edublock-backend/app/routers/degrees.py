@@ -9,6 +9,7 @@ from app.models.degree import Degree, DegreeStatus
 from app.models.transaction import Transaction, TransactionType, TransactionStatus
 from app.schemas.degree import DegreeIssue, DegreeBulkIssue, DegreeResponse, DegreeRevoke, VerifyRequest, VerifyResponse
 from app.utils.security import get_current_user, require_role
+from app.services.blockchain_service import blockchain
 
 router = APIRouter(prefix="/api/degrees", tags=["Degrees / Certificates"])
 
@@ -65,17 +66,39 @@ def issue_degree(
     db.commit()
     db.refresh(degree)
 
-    # Create mock transaction record (real blockchain tx in Phase 3)
-    tx = Transaction(
-        tx_hash=f"0x{hashlib.sha256(str(degree.id).encode()).hexdigest()[:64]}",
-        type=TransactionType.MINT,
-        degree_id=degree.id,
-        from_address=current_user.wallet_address or "0x0000",
-        status=TransactionStatus.CONFIRMED,
-    )
-    db.add(tx)
-    degree.tx_hash = tx.tx_hash
-    db.commit()
+    # ========== BLOCKCHAIN MINTING ==========
+    # Try to mint on blockchain (if Ganache is running)
+    tx_data = blockchain.mint_degree(token_id, blockchain_hash)
+
+    if tx_data:
+        # Real blockchain transaction succeeded
+        tx = Transaction(
+            tx_hash=tx_data["tx_hash"],
+            type=TransactionType.MINT,
+            degree_id=degree.id,
+            from_address=tx_data["from_address"],
+            status=TransactionStatus.CONFIRMED if tx_data["status"] == "confirmed" else TransactionStatus.FAILED,
+            block_number=tx_data["block_number"],
+            gas_used=tx_data["gas_used"],
+        )
+        db.add(tx)
+        degree.tx_hash = tx_data["tx_hash"]
+        db.commit()
+        print(f"🔗 Degree #{degree.id} minted on blockchain! Tx: {tx_data['tx_hash'][:20]}...")
+    else:
+        # Fallback: create mock transaction if blockchain is not available
+        mock_tx_hash = f"0x{hashlib.sha256(str(degree.id).encode()).hexdigest()[:64]}"
+        tx = Transaction(
+            tx_hash=mock_tx_hash,
+            type=TransactionType.MINT,
+            degree_id=degree.id,
+            from_address=current_user.wallet_address or "0x0000",
+            status=TransactionStatus.CONFIRMED,
+        )
+        db.add(tx)
+        degree.tx_hash = mock_tx_hash
+        db.commit()
+        print(f"⚠️  Blockchain unavailable. Mock tx created for degree #{degree.id}")
 
     return degree
 
@@ -119,13 +142,28 @@ def bulk_issue_degrees(
         db.add(degree)
         db.flush()
 
-        tx = Transaction(
-            tx_hash=f"0x{hashlib.sha256(str(degree.id).encode()).hexdigest()[:64]}",
-            type=TransactionType.MINT,
-            degree_id=degree.id,
-            from_address=current_user.wallet_address or "0x0000",
-            status=TransactionStatus.CONFIRMED,
-        )
+        # Blockchain mint for each degree
+        tx_data = blockchain.mint_degree(token_id, blockchain_hash)
+
+        if tx_data:
+            tx = Transaction(
+                tx_hash=tx_data["tx_hash"],
+                type=TransactionType.MINT,
+                degree_id=degree.id,
+                from_address=tx_data["from_address"],
+                status=TransactionStatus.CONFIRMED,
+                block_number=tx_data["block_number"],
+                gas_used=tx_data["gas_used"],
+            )
+        else:
+            tx = Transaction(
+                tx_hash=f"0x{hashlib.sha256(str(degree.id).encode()).hexdigest()[:64]}",
+                type=TransactionType.MINT,
+                degree_id=degree.id,
+                from_address=current_user.wallet_address or "0x0000",
+                status=TransactionStatus.CONFIRMED,
+            )
+
         db.add(tx)
         degree.tx_hash = tx.tx_hash
         results.append(degree.student_name)
@@ -183,8 +221,31 @@ def revoke_degree(
     if not degree:
         raise HTTPException(status_code=404, detail="Degree not found")
 
+    # Revoke on blockchain if connected
+    if degree.token_id and blockchain.is_connected:
+        blockchain.revoke_on_chain(degree.token_id)
+
     degree.status = DegreeStatus.REVOKED
     degree.revoke_reason = request.reason
     db.commit()
 
     return {"message": f"Degree for '{degree.student_name}' has been revoked"}
+
+
+@router.delete("/{degree_id}")
+def delete_degree(
+    degree_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "superadmin")),
+):
+    """Permanently delete a degree. Admin/SuperAdmin only."""
+    degree = db.query(Degree).filter(Degree.id == degree_id).first()
+    if not degree:
+        raise HTTPException(status_code=404, detail="Degree not found")
+
+    # Also delete related transactions
+    db.query(Transaction).filter(Transaction.degree_id == degree_id).delete()
+    db.delete(degree)
+    db.commit()
+
+    return {"message": f"Degree for '{degree.student_name}' has been permanently deleted"}

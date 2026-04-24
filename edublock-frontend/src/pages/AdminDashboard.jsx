@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Button from '../components/Button';
 import Card from '../components/Card';
@@ -147,7 +148,10 @@ const AdminDashboard = () => {
     });
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
-    const [activeTab, setActiveTab] = useState('issue'); // 'issue', 'certificates', 'pending', 'audit', 'bulk'
+    const [searchParams] = useSearchParams();
+    const validTabs = ['issue', 'certificates', 'pending', 'audit', 'bulk'];
+    const initialTab = validTabs.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'issue';
+    const [activeTab, setActiveTab] = useState(initialTab); // 'issue', 'certificates', 'pending', 'audit', 'bulk'
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [notification, setNotification] = useState({ show: false, type: '', message: '' });
@@ -262,6 +266,20 @@ const AdminDashboard = () => {
                 : cert
         ));
         showNotification('success', `Certificate status changed to ${newStatus}.`);
+    };
+
+    // Handle certificate deletion
+    const handleDelete = async (cert) => {
+        if (!window.confirm(`Are you sure you want to permanently delete the certificate for "${cert.studentName}"? This action cannot be undone.`)) {
+            return;
+        }
+        try {
+            await degreesAPI.delete(cert.id);
+            setIssuedCertificates(prev => prev.filter(c => c.id !== cert.id));
+            showNotification('success', `Certificate for ${cert.studentName} has been deleted.`);
+        } catch (err) {
+            showNotification('error', err.response?.data?.detail || 'Failed to delete certificate.');
+        }
     };
 
     // Chart data
@@ -473,51 +491,28 @@ const AdminDashboard = () => {
 
                     {/* Tab Navigation */}
                     <div className="flex gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
-                        <button
-                            onClick={() => setActiveTab('issue')}
-                            className={`px-4 sm:px-6 py-3 rounded-lg font-semibold transition-all whitespace-nowrap text-sm sm:text-base ${activeTab === 'issue'
-                                ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-black'
-                                : 'bg-white/5 text-white/70 hover:bg-white/10'
-                                }`}
-                        >
-                            📝 Issue
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('certificates')}
-                            className={`px-4 sm:px-6 py-3 rounded-lg font-semibold transition-all whitespace-nowrap text-sm sm:text-base ${activeTab === 'certificates'
-                                ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-black'
-                                : 'bg-white/5 text-white/70 hover:bg-white/10'
-                                }`}
-                        >
-                            📋 Certificates ({issuedCertificates.length})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('pending')}
-                            className={`px-4 sm:px-6 py-3 rounded-lg font-semibold transition-all whitespace-nowrap text-sm sm:text-base ${activeTab === 'pending'
-                                ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-black'
-                                : 'bg-white/5 text-white/70 hover:bg-white/10'
-                                }`}
-                        >
-                            ⏳ Pending ({pendingTransactions.length})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('audit')}
-                            className={`px-4 sm:px-6 py-3 rounded-lg font-semibold transition-all whitespace-nowrap text-sm sm:text-base ${activeTab === 'audit'
-                                ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-black'
-                                : 'bg-white/5 text-white/70 hover:bg-white/10'
-                                }`}
-                        >
-                            📊 Audit Log
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('bulk')}
-                            className={`px-4 sm:px-6 py-3 rounded-lg font-semibold transition-all whitespace-nowrap text-sm sm:text-base ${activeTab === 'bulk'
-                                ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-black'
-                                : 'bg-white/5 text-white/70 hover:bg-white/10'
-                                }`}
-                        >
-                            📤 Bulk Upload
-                        </button>
+                        {[
+                            { id: 'issue', icon: '📝', label: 'Issue' },
+                            { id: 'certificates', icon: '📋', label: `Certificates (${issuedCertificates.length})` },
+                            { id: 'pending', icon: '⏳', label: `Pending (${pendingTransactions.length})` },
+                            { id: 'audit', icon: '📊', label: 'Audit Log' },
+                            { id: 'bulk', icon: '📤', label: 'Bulk Upload' },
+                        ].map(tab => (
+                            <a
+                                key={tab.id}
+                                href={`/admin?tab=${tab.id}`}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    setActiveTab(tab.id);
+                                }}
+                                className={`px-4 sm:px-6 py-3 rounded-lg font-semibold transition-all whitespace-nowrap text-sm sm:text-base cursor-pointer inline-block ${activeTab === tab.id
+                                    ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-black'
+                                    : 'bg-white/5 text-white/70 hover:bg-white/10'
+                                    }`}
+                            >
+                                {tab.icon} {tab.label}
+                            </a>
+                        ))}
                     </div>
 
                     {/* Stats Cards Row */}
@@ -695,18 +690,32 @@ const AdminDashboard = () => {
                                             <label htmlFor="certificateHash" className="block text-sm font-medium mb-2 text-white/70">
                                                 Certificate Hash / ID
                                             </label>
-                                            <div className="relative">
-                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">⛓️</span>
-                                                <input
-                                                    id="certificateHash"
-                                                    name="certificateHash"
-                                                    type="text"
-                                                    value={formData.certificateHash}
-                                                    onChange={handleInputChange}
-                                                    placeholder="Will be auto-generated on blockchain"
-                                                    className="input-field w-full pl-12 bg-white/5"
-                                                    readOnly
-                                                />
+                                            <div className="relative flex gap-2">
+                                                <div className="relative flex-1">
+                                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">⛓️</span>
+                                                    <input
+                                                        id="certificateHash"
+                                                        name="certificateHash"
+                                                        type="text"
+                                                        value={formData.certificateHash}
+                                                        onChange={handleInputChange}
+                                                        placeholder="Will be auto-generated on blockchain"
+                                                        className="input-field w-full pl-12 bg-white/5"
+                                                        readOnly
+                                                    />
+                                                </div>
+                                                {formData.certificateHash && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(formData.certificateHash);
+                                                            showNotification('success', 'Hash copied to clipboard!');
+                                                        }}
+                                                        className="px-4 py-2 bg-amber-500/20 border border-amber-500/30 rounded-lg text-amber-400 hover:bg-amber-500/30 transition-all text-sm font-medium whitespace-nowrap"
+                                                    >
+                                                        📋 Copy
+                                                    </button>
+                                                )}
                                             </div>
                                             <p className="text-xs text-white/40 mt-1">This hash will be generated after blockchain transaction</p>
                                         </div>
@@ -897,6 +906,14 @@ const AdminDashboard = () => {
                                                                 🚫 Revoke
                                                             </Button>
                                                         )}
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleDelete(cert)}
+                                                            className="border-red-700 text-red-500 hover:bg-red-700/10"
+                                                        >
+                                                            🗑 Delete
+                                                        </Button>
                                                     </div>
                                                 </td>
                                             </tr>
