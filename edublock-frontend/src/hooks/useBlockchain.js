@@ -10,6 +10,12 @@ export const useWallet = () => {
     const connectWallet = async () => {
         if (typeof window.ethereum !== 'undefined') {
             try {
+                // Force MetaMask to display the authorization and account selection popup
+                await window.ethereum.request({
+                    method: 'wallet_requestPermissions',
+                    params: [{ eth_accounts: {} }]
+                });
+
                 const accounts = await window.ethereum.request({
                     method: 'eth_requestAccounts',
                 });

@@ -11,6 +11,7 @@ class UserResponse(BaseModel):
     university_id: Optional[int] = None
     wallet_address: Optional[str] = None
     status: str
+    profile_image: Optional[str] = None
     created_at: Optional[datetime] = None
     last_login: Optional[datetime] = None
 
@@ -27,4 +28,13 @@ class UserCreate(BaseModel):
 
 
 class UserStatusUpdate(BaseModel):
-    status: str  # active, inactive, suspended
+    status: str  # active, inactive, suspended, pending
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class PreferencesUpdate(BaseModel):
+    preferences: dict

@@ -6,8 +6,8 @@ from app.database import Base
 
 
 class UniversityStatus(str, enum.Enum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
 
 
 class University(Base):

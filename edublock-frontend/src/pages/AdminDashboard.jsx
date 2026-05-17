@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import { openTransactionInExplorer, shortenHash } from '../utils/blockchain';
-import { degreesAPI, analyticsAPI } from '../services/api';
+import { degreesAPI, analyticsAPI, auditAPI } from '../services/api';
 
 // Custom Bar Chart Component
 const BarChart = ({ data, title }) => {
@@ -135,18 +135,159 @@ const StatsCard = ({ icon, label, value, color, delay = 0 }) => {
     );
 };
 
+// Validation Helper Functions
+const scanInjections = (val) => {
+    if (!val) return null;
+    const lower = String(val).toLowerCase();
+    const sqlKeywords = ['select ', 'union ', 'insert ', 'update ', 'delete ', 'drop ', 'alter ', '--', '/*', 'xp_cmdshell'];
+    for (const kw of sqlKeywords) {
+        if (lower.includes(kw)) {
+            return "Potentially unsafe database keywords detected.";
+        }
+    }
+    const xssPatterns = ['<script', 'javascript:', 'onload', 'onerror'];
+    for (const pattern of xssPatterns) {
+        if (lower.includes(pattern)) {
+            return "Potentially unsafe HTML or script tags detected.";
+        }
+    }
+    return null;
+};
+
+const validateStudentName = (val) => {
+    const trimmed = val ? String(val).trim() : '';
+    if (!trimmed) return "Student name is required.";
+    if (trimmed.length < 2 || trimmed.length > 100) return "Student name must be between 2 and 100 characters.";
+    
+    // Scan for SQL/XSS injections
+    const injectionErr = scanInjections(trimmed);
+    if (injectionErr) return injectionErr;
+
+    // Only allow letters, spaces, dots, hyphens, and apostrophes
+    const nameRegex = /^[a-zA-Z\s.'-]+$/;
+    if (!nameRegex.test(trimmed)) {
+        return "Student name must only contain letters, spaces, or dots.";
+    }
+    return null;
+};
+
+const validateRegistrationNumber = (val) => {
+    const trimmed = val ? String(val).trim() : '';
+    if (!trimmed) return "Registration number is required.";
+    if (trimmed.length < 3 || trimmed.length > 50) return "Registration number must be between 3 and 50 characters.";
+    
+    // Scan for SQL/XSS injections
+    const injectionErr = scanInjections(trimmed);
+    if (injectionErr) return injectionErr;
+
+    // Allow alphanumeric, spaces, hyphens, slashes
+    const regRegex = /^[a-zA-Z0-9\s/-]+$/;
+    if (!regRegex.test(trimmed)) {
+        return "Registration number must contain only letters, numbers, hyphens, or slashes.";
+    }
+    return null;
+};
+
+const validateDegreeName = (val) => {
+    const trimmed = val ? String(val).trim() : '';
+    if (!trimmed) return "Degree name is required.";
+    if (trimmed.length < 3 || trimmed.length > 100) return "Degree name must be between 3 and 100 characters.";
+    
+    // Scan for SQL/XSS injections
+    const injectionErr = scanInjections(trimmed);
+    if (injectionErr) return injectionErr;
+
+    // Allow letters, numbers, spaces, dots, hyphens, parentheses, slashes, or ampersands
+    const degreeRegex = /^[a-zA-Z0-9\s.()'/&-]+$/;
+    if (!degreeRegex.test(trimmed)) {
+        return "Degree name must contain only letters, numbers, spaces, or standard symbols.";
+    }
+    return null;
+};
+
+const validateGradeOrCGPA = (val) => {
+    const trimmed = val ? String(val).trim() : '';
+    if (!trimmed) return "Grade or CGPA is required.";
+
+    // Scan for SQL/XSS injections
+    const injectionErr = scanInjections(trimmed);
+    if (injectionErr) return injectionErr;
+
+    // Check if it is a number (CGPA)
+    // Accept standard integers or decimals like 3, 3., 3.8, 3.15, 4, 4.00, etc.
+    const isNumeric = /^\d+(\.\d*)?$/.test(trimmed);
+    if (isNumeric) {
+        const num = parseFloat(trimmed);
+        if (isNaN(num)) {
+            return "Invalid CGPA format.";
+        }
+        if (num < 0 || num > 4.0) {
+            return "CGPA must be between 0.0 and 4.0.";
+        }
+        // Check decimal places
+        if (trimmed.includes('.')) {
+            const decimalPart = trimmed.split('.')[1];
+            if (decimalPart && decimalPart.length > 2) {
+                return "CGPA allows at most 2 decimal places (e.g., 3.1 or 3.15).";
+            }
+        }
+        return null; // Valid CGPA
+    }
+
+    // Check if it is a valid letter grade
+    const validGrades = ['A', 'A+', 'B', 'B+', 'C', 'D', 'F'];
+    const upperGrade = trimmed.toUpperCase();
+    if (!validGrades.includes(upperGrade)) {
+        return "Grade must be one of: A, A+, B, B+, C, D, F.";
+    }
+
+    return null; // Valid Grade
+};
+
+const validateIssueDate = (val) => {
+    if (!val) return "Issue date is required.";
+    const selectedDate = new Date(val);
+    if (isNaN(selectedDate.getTime())) {
+        return "Invalid date format.";
+    }
+    const today = new Date();
+    
+    // Normalize to midnight to avoid hour differences blocking today's dates
+    selectedDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    
+    if (selectedDate > today) {
+        return "Issue date cannot be in the future.";
+    }
+    return null;
+};
+
+const getTodayDateString = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 const AdminDashboard = () => {
+    // Get logged-in user's university name
+    const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const adminUniversityName = storedUser.university_name || '';
+
     const [formData, setFormData] = useState({
         studentName: '',
         studentId: '',
         registrationNumber: '',
         degreeName: '',
-        universityName: '',
+        universityName: adminUniversityName,
         grade: '',
         issueDate: '',
         certificateHash: '',
     });
+    const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
+    const [dataLoading, setDataLoading] = useState(true);
     const [success, setSuccess] = useState(false);
     const [searchParams] = useSearchParams();
     const validTabs = ['issue', 'certificates', 'pending', 'audit', 'bulk'];
@@ -158,6 +299,8 @@ const AdminDashboard = () => {
     const [showRevokeModal, setShowRevokeModal] = useState(false);
     const [selectedCert, setSelectedCert] = useState(null);
     const [revokeReason, setRevokeReason] = useState('');
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [certToDelete, setCertToDelete] = useState(null);
 
     // Bulk Upload State
     const [csvData, setCsvData] = useState([]);
@@ -174,6 +317,15 @@ const AdminDashboard = () => {
 
     // Audit Log Data
     const [auditLog, setAuditLog] = useState([]);
+    const [auditPage, setAuditPage] = useState(1);
+    const [auditTotal, setAuditTotal] = useState(0);
+    const [auditFilter, setAuditFilter] = useState('all');
+
+    // Certificates Tab Pagination State
+    const [certsPage, setCertsPage] = useState(1);
+
+    // Bulk Upload Preview Pagination State
+    const [bulkPage, setBulkPage] = useState(1);
 
     // Pending Transactions Data
     const [pendingTransactions, setPendingTransactions] = useState([]);
@@ -181,6 +333,7 @@ const AdminDashboard = () => {
     // Fetch certificates and stats from backend on mount
     useEffect(() => {
         const fetchData = async () => {
+            setDataLoading(true);
             try {
                 const [certsRes, statsRes] = await Promise.all([
                     degreesAPI.list(),
@@ -194,7 +347,7 @@ const AdminDashboard = () => {
                     studentId: cert.student_id,
                     degreeName: cert.degree_name,
                     issueDate: cert.issue_date,
-                    status: cert.status === 'issued' ? 'Issued' : cert.status === 'revoked' ? 'Revoked' : 'Pending',
+                    status: cert.status?.toLowerCase() === 'issued' ? 'Issued' : cert.status?.toLowerCase() === 'revoked' ? 'Revoked' : 'Pending',
                     hash: cert.blockchain_hash || '',
                     txHash: cert.tx_hash || '',
                     revokeReason: cert.revoke_reason || '',
@@ -202,30 +355,43 @@ const AdminDashboard = () => {
 
                 setIssuedCertificates(certs);
                 setStats(statsRes.data);
-
-                // Set pending from certs
-                const pending = certs.filter(c => c.status === 'Pending');
-                setPendingTransactions(pending.map(c => ({
-                    id: c.id,
-                    studentName: c.studentName,
-                    degreeName: c.degreeName,
-                    txHash: c.txHash,
-                    status: 'Pending',
-                    submittedAt: c.issueDate,
-                })));
-
             } catch (err) {
                 console.error('Error fetching dashboard data:', err);
+                showNotification('error', 'Failed to load dashboard data. Please refresh.');
+            } finally {
+                setDataLoading(false);
             }
         };
         fetchData();
     }, []);
+
+    // Fetch audit logs
+    useEffect(() => {
+        const fetchAuditLogs = async () => {
+            try {
+                const filterValue = auditFilter === 'all' ? '' : auditFilter;
+                const res = await auditAPI.getLogs(auditPage, 20, filterValue);
+                setAuditLog(res.data.logs || []);
+                setAuditTotal(res.data.total || 0);
+            } catch (err) {
+                console.error('Error fetching audit logs:', err);
+            }
+        };
+        if (activeTab === 'audit') {
+            fetchAuditLogs();
+        }
+    }, [activeTab, auditPage, auditFilter]);
 
 
     const showNotification = (type, message) => {
         setNotification({ show: true, type, message });
         setTimeout(() => setNotification({ show: false, type: '', message: '' }), 3000);
     };
+
+    // Smooth scroll to top of viewport when page or tab changes
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, [certsPage, auditPage, bulkPage, activeTab]);
 
     // Filter certificates based on search and status
     const filteredCertificates = issuedCertificates.filter(cert => {
@@ -236,6 +402,32 @@ const AdminDashboard = () => {
         const matchesStatus = statusFilter === 'all' || cert.status === statusFilter;
         return matchesSearch && matchesStatus;
     });
+
+    const CERTS_PER_PAGE = 20;
+    const totalCertsPages = Math.ceil(filteredCertificates.length / CERTS_PER_PAGE) || 1;
+    const paginatedCertificates = useMemo(() => {
+        const startIndex = (certsPage - 1) * CERTS_PER_PAGE;
+        return filteredCertificates.slice(startIndex, startIndex + CERTS_PER_PAGE);
+    }, [filteredCertificates, certsPage]);
+
+    // Reset certsPage if filter changes make current page invalid
+    useEffect(() => {
+        if (certsPage > totalCertsPages) {
+            setCertsPage(1);
+        }
+    }, [filteredCertificates.length, totalCertsPages, certsPage]);
+
+    const BULK_PER_PAGE = 20;
+    const totalBulkPages = Math.ceil(csvData.length / BULK_PER_PAGE) || 1;
+    const paginatedCsvData = useMemo(() => {
+        const startIndex = (bulkPage - 1) * BULK_PER_PAGE;
+        return csvData.slice(startIndex, startIndex + BULK_PER_PAGE);
+    }, [csvData, bulkPage]);
+
+    // Reset bulkPage when new CSV is uploaded or cleared
+    useEffect(() => {
+        setBulkPage(1);
+    }, [csvData]);
 
     const handleRevoke = async () => {
         if (!selectedCert || !revokeReason.trim()) return;
@@ -258,66 +450,173 @@ const AdminDashboard = () => {
         setRevokeReason('');
     };
 
-    // Handle status change
-    const handleStatusChange = (certId, newStatus) => {
-        setIssuedCertificates(prev => prev.map(cert =>
-            cert.id === certId
-                ? { ...cert, status: newStatus }
-                : cert
-        ));
-        showNotification('success', `Certificate status changed to ${newStatus}.`);
+    // Handle status change (persists to backend + audit log)
+    const handleStatusChange = async (certId, newStatus) => {
+        try {
+            const statusMap = { 'Issued': 'issued', 'Pending': 'pending', 'Revoked': 'revoked' };
+            const backendStatus = statusMap[newStatus] || newStatus.toLowerCase();
+            await degreesAPI.updateStatus(certId, backendStatus);
+            setIssuedCertificates(prev => prev.map(cert =>
+                cert.id === certId
+                    ? { ...cert, status: newStatus, revokeReason: newStatus !== 'Revoked' ? '' : cert.revokeReason }
+                    : cert
+            ));
+            showNotification('success', `Certificate status changed to ${newStatus}.`);
+        } catch (err) {
+            showNotification('error', err.response?.data?.detail || 'Failed to change status.');
+        }
     };
 
-    // Handle certificate deletion
-    const handleDelete = async (cert) => {
-        if (!window.confirm(`Are you sure you want to permanently delete the certificate for "${cert.studentName}"? This action cannot be undone.`)) {
-            return;
-        }
+    // Handle certificate deletion button click
+    const handleDelete = (cert) => {
+        setCertToDelete(cert);
+        setShowDeleteModal(true);
+    };
+
+    // Confirm deletion
+    const confirmDelete = async () => {
+        if (!certToDelete) return;
+        
         try {
-            await degreesAPI.delete(cert.id);
-            setIssuedCertificates(prev => prev.filter(c => c.id !== cert.id));
-            showNotification('success', `Certificate for ${cert.studentName} has been deleted.`);
+            await degreesAPI.delete(certToDelete.id);
+            setIssuedCertificates(prev => prev.filter(c => c.id !== certToDelete.id));
+            showNotification('success', `Certificate for ${certToDelete.studentName} has been deleted.`);
         } catch (err) {
             showNotification('error', err.response?.data?.detail || 'Failed to delete certificate.');
         }
+        setShowDeleteModal(false);
+        setCertToDelete(null);
     };
 
-    // Chart data
-    const monthlyData = [
-        { label: 'January', value: 45, color: '#fbbf24', colorEnd: '#f59e0b' },
-        { label: 'February', value: 38, color: '#10b981', colorEnd: '#059669' },
-        { label: 'March', value: 52, color: '#fbbf24', colorEnd: '#10b981' },
-        { label: 'April', value: 23, color: '#f59e0b', colorEnd: '#fbbf24' },
-        { label: 'May', value: 67, color: '#10b981', colorEnd: '#34d399' },
-        { label: 'June', value: 41, color: '#fbbf24', colorEnd: '#f59e0b' },
-    ];
+    // Chart data dynamically calculated
+    const monthlyData = useMemo(() => {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const colors = ['#fbbf24', '#10b981', '#f59e0b', '#34d399', '#3b82f6', '#8b5cf6'];
+        
+        const counts = Array(12).fill(0);
+        issuedCertificates.forEach(cert => {
+            if (cert.issueDate) {
+                const month = new Date(cert.issueDate).getMonth();
+                if (!isNaN(month)) counts[month]++;
+            }
+        });
 
-    const degreeDistribution = [
-        { label: 'Computer Science', value: 45, color: '#fbbf24' },
-        { label: 'Engineering', value: 30, color: '#10b981' },
-        { label: 'Business', value: 25, color: '#f59e0b' },
-        { label: 'Arts', value: 15, color: '#34d399' },
-    ];
+        // Get last 6 months
+        const currentMonth = new Date().getMonth();
+        const result = [];
+        for (let i = 5; i >= 0; i--) {
+            const m = (currentMonth - i + 12) % 12;
+            result.push({
+                label: monthNames[m],
+                value: counts[m],
+                color: colors[i % colors.length],
+                colorEnd: colors[(i + 1) % colors.length],
+            });
+        }
+        return result;
+    }, [issuedCertificates]);
+
+    const degreeDistribution = useMemo(() => {
+        const colors = ['#fbbf24', '#10b981', '#f59e0b', '#34d399', '#3b82f6', '#8b5cf6'];
+        const counts = {};
+        issuedCertificates.forEach(cert => {
+            const name = cert.degreeName || 'Unknown';
+            counts[name] = (counts[name] || 0) + 1;
+        });
+        
+        return Object.entries(counts)
+            .map(([label, value], index) => ({
+                label,
+                value,
+                color: colors[index % colors.length],
+            }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 5); // top 5
+    }, [issuedCertificates]);
+
+    const validateForm = () => {
+        const newErrors = {};
+
+        const studentNameErr = validateStudentName(formData.studentName);
+        if (studentNameErr) newErrors.studentName = studentNameErr;
+
+        const regErr = validateRegistrationNumber(formData.registrationNumber);
+        if (regErr) newErrors.registrationNumber = regErr;
+
+        const degErr = validateDegreeName(formData.degreeName);
+        if (degErr) newErrors.degreeName = degErr;
+
+        const gradeErr = validateGradeOrCGPA(formData.grade);
+        if (gradeErr) newErrors.grade = gradeErr;
+
+        const dateErr = validateIssueDate(formData.issueDate);
+        if (dateErr) newErrors.issueDate = dateErr;
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const handleBlur = (e) => {
+        const { name, value } = e.target;
+        let errorMsg = null;
+        if (name === 'studentName') errorMsg = validateStudentName(value);
+        else if (name === 'registrationNumber') errorMsg = validateRegistrationNumber(value);
+        else if (name === 'degreeName') errorMsg = validateDegreeName(value);
+        else if (name === 'grade') errorMsg = validateGradeOrCGPA(value);
+        else if (name === 'issueDate') errorMsg = validateIssueDate(value);
+
+        setErrors(prev => ({
+            ...prev,
+            [name]: errorMsg
+        }));
+    };
 
     const handleInputChange = (e) => {
+        let { name, value } = e.target;
+        
+        if (name === 'grade') {
+            value = value.toUpperCase();
+        }
+
         setFormData({
             ...formData,
-            [e.target.name]: e.target.value,
+            [name]: value,
         });
+
+        if (errors[name]) {
+            let errorMsg = null;
+            if (name === 'studentName') errorMsg = validateStudentName(value);
+            else if (name === 'registrationNumber') errorMsg = validateRegistrationNumber(value);
+            else if (name === 'degreeName') errorMsg = validateDegreeName(value);
+            else if (name === 'grade') errorMsg = validateGradeOrCGPA(value);
+            else if (name === 'issueDate') errorMsg = validateIssueDate(value);
+
+            setErrors(prev => ({
+                ...prev,
+                [name]: errorMsg
+            }));
+        }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        const isValid = validateForm();
+        if (!isValid) {
+            showNotification('error', 'Please fix the errors in the form.');
+            return;
+        }
+
         setLoading(true);
 
         try {
             // Call backend API to issue certificate
             const response = await degreesAPI.issue({
-                student_name: formData.studentName,
-                student_id: formData.studentId,
-                registration_no: formData.registrationNumber,
-                degree_name: formData.degreeName,
-                grade: formData.grade,
+                student_name: formData.studentName.trim(),
+                student_id: formData.registrationNumber.trim(), // Fallback student_id to registration_no
+                registration_no: formData.registrationNumber.trim(),
+                degree_name: formData.degreeName.trim(),
+                grade: formData.grade.trim(),
                 issue_date: formData.issueDate,
             });
 
@@ -342,11 +641,12 @@ const AdminDashboard = () => {
                 studentId: '',
                 registrationNumber: '',
                 degreeName: '',
-                universityName: '',
+                universityName: adminUniversityName,
                 grade: '',
                 issueDate: '',
                 certificateHash: cert.blockchain_hash || '',
             });
+            setErrors({});
 
             showNotification('success', 'Certificate issued successfully!');
             setTimeout(() => setSuccess(false), 5000);
@@ -420,17 +720,54 @@ const AdminDashboard = () => {
         try {
             // Map CSV data to backend format
             const degrees = csvData.map(row => ({
+                registration_no: row['Registration No'] || row['registrationNo'] || '',
                 student_name: row['Student Name'] || row['studentName'] || 'Unknown',
-                student_id: row['Student ID'] || row['studentId'] || 'BULK-' + Date.now(),
+                student_id: row['Registration No'] || row['registrationNo'] || 'BULK-' + Date.now(), // Fallback to reg no for legacy student_id field
                 degree_name: row['Degree Name'] || row['degreeName'] || 'Unknown',
                 grade: row['Grade'] || row['grade'] || '',
                 issue_date: row['Issue Date'] || row['issueDate'] || new Date().toISOString().split('T')[0],
             }));
 
+            // Validate bulk uploaded data
+            const errorsList = [];
+            const validatedDegrees = degrees.map((deg, index) => {
+                const rowNum = index + 1;
+                const nameErr = validateStudentName(deg.student_name);
+                const regErr = validateRegistrationNumber(deg.registration_no);
+                const degErr = validateDegreeName(deg.degree_name);
+                
+                // Trim and uppercase grade
+                const rawGrade = deg.grade ? String(deg.grade).toUpperCase().trim() : '';
+                const gradeErr = validateGradeOrCGPA(rawGrade);
+                const dateErr = validateIssueDate(deg.issue_date);
+
+                if (nameErr) errorsList.push(`Row ${rowNum} Name: ${nameErr}`);
+                if (regErr) errorsList.push(`Row ${rowNum} Reg No: ${regErr}`);
+                if (degErr) errorsList.push(`Row ${rowNum} Degree: ${degErr}`);
+                if (gradeErr) errorsList.push(`Row ${rowNum} Grade/CGPA: ${gradeErr}`);
+                if (dateErr) errorsList.push(`Row ${rowNum} Date: ${dateErr}`);
+
+                return {
+                    ...deg,
+                    registration_no: deg.registration_no.trim(),
+                    student_name: deg.student_name.trim(),
+                    degree_name: deg.degree_name.trim(),
+                    grade: rawGrade,
+                };
+            });
+
+            if (errorsList.length > 0) {
+                setBulkUploading(false);
+                setBulkProgress(0);
+                // Show first error in notification
+                showNotification('error', `Validation failed in CSV: ${errorsList[0]} (and ${errorsList.length - 1} other errors). Please correct and upload again.`);
+                return;
+            }
+
             setBulkProgress(50);
 
             // Send to backend
-            const response = await degreesAPI.bulkIssue(degrees);
+            const response = await degreesAPI.bulkIssue(validatedDegrees);
 
             setBulkProgress(90);
 
@@ -442,9 +779,10 @@ const AdminDashboard = () => {
                 studentId: cert.student_id,
                 degreeName: cert.degree_name,
                 issueDate: cert.issue_date,
-                status: cert.status === 'issued' ? 'Issued' : cert.status === 'revoked' ? 'Revoked' : 'Pending',
+                status: cert.status?.toLowerCase() === 'issued' ? 'Issued' : cert.status?.toLowerCase() === 'revoked' ? 'Revoked' : 'Pending',
                 hash: cert.blockchain_hash || '',
                 txHash: cert.tx_hash || '',
+                revokeReason: cert.revoke_reason || '',
             }));
             setIssuedCertificates(certs);
 
@@ -461,7 +799,7 @@ const AdminDashboard = () => {
     };
 
     const downloadSampleCSV = () => {
-        const csvContent = `Student Name,Student ID,Degree Name,Issue Date\nJohn Doe,STU-2024-001,BS Computer Science,2025-01-15\nJane Smith,STU-2024-002,BS Data Science,2025-01-14\nMike Johnson,STU-2024-003,BS Electrical Engineering,2025-01-13`;
+        const csvContent = `Registration No,Student Name,Degree Name,Grade,Issue Date\n2020-AG-001,John Doe,BS Computer Science,A+,2025-01-15\n2020-AG-002,Jane Smith,BS Data Science,A,2025-01-14\n2020-AG-003,Mike Johnson,BS Electrical Engineering,B+,2025-01-13`;
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -552,7 +890,7 @@ const AdminDashboard = () => {
                                         <h2 className="text-2xl font-bold">Issue New Certificate</h2>
                                     </div>
                                     <form onSubmit={handleSubmit} className="space-y-6">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 gap-4">
                                             <div>
                                                 <label htmlFor="studentName" className="block text-sm font-medium mb-2 text-white/70">
                                                     Student Name
@@ -565,29 +903,21 @@ const AdminDashboard = () => {
                                                         type="text"
                                                         value={formData.studentName}
                                                         onChange={handleInputChange}
+                                                        onBlur={handleBlur}
                                                         placeholder="Enter student full name"
-                                                        className="input-field w-full pl-12"
+                                                        className={`input-field w-full pl-12 ${errors.studentName ? 'border-red-500 focus:border-red-500/50' : ''}`}
                                                         required
                                                     />
                                                 </div>
-                                            </div>
-                                            <div>
-                                                <label htmlFor="studentId" className="block text-sm font-medium mb-2 text-white/70">
-                                                    Student ID
-                                                </label>
-                                                <div className="relative">
-                                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">🆔</span>
-                                                    <input
-                                                        id="studentId"
-                                                        name="studentId"
-                                                        type="text"
-                                                        value={formData.studentId}
-                                                        onChange={handleInputChange}
-                                                        placeholder="e.g., STU-2024-001"
-                                                        className="input-field w-full pl-12"
-                                                        required
-                                                    />
-                                                </div>
+                                                {errors.studentName && (
+                                                    <motion.p
+                                                        initial={{ opacity: 0, y: -5 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        className="text-red-400 text-xs mt-1"
+                                                    >
+                                                        ⚠️ {errors.studentName}
+                                                    </motion.p>
+                                                )}
                                             </div>
                                         </div>
 
@@ -603,11 +933,21 @@ const AdminDashboard = () => {
                                                     type="text"
                                                     value={formData.registrationNumber}
                                                     onChange={handleInputChange}
+                                                    onBlur={handleBlur}
                                                     placeholder="Enter registration number"
-                                                    className="input-field w-full pl-12"
+                                                    className={`input-field w-full pl-12 ${errors.registrationNumber ? 'border-red-500 focus:border-red-500/50' : ''}`}
                                                     required
                                                 />
                                             </div>
+                                            {errors.registrationNumber && (
+                                                <motion.p
+                                                    initial={{ opacity: 0, y: -5 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    className="text-red-400 text-xs mt-1"
+                                                >
+                                                    ⚠️ {errors.registrationNumber}
+                                                </motion.p>
+                                            )}
                                         </div>
 
                                         <div>
@@ -622,11 +962,21 @@ const AdminDashboard = () => {
                                                     type="text"
                                                     value={formData.degreeName}
                                                     onChange={handleInputChange}
+                                                    onBlur={handleBlur}
                                                     placeholder="e.g., Bachelor of Science in Computer Science"
-                                                    className="input-field w-full pl-12"
+                                                    className={`input-field w-full pl-12 ${errors.degreeName ? 'border-red-500 focus:border-red-500/50' : ''}`}
                                                     required
                                                 />
                                             </div>
+                                            {errors.degreeName && (
+                                                <motion.p
+                                                    initial={{ opacity: 0, y: -5 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    className="text-red-400 text-xs mt-1"
+                                                >
+                                                    ⚠️ {errors.degreeName}
+                                                </motion.p>
+                                            )}
                                         </div>
 
                                         <div>
@@ -640,12 +990,12 @@ const AdminDashboard = () => {
                                                     name="universityName"
                                                     type="text"
                                                     value={formData.universityName}
-                                                    onChange={handleInputChange}
-                                                    placeholder="Enter university name"
-                                                    className="input-field w-full pl-12"
-                                                    required
+                                                    placeholder="Linked to your admin account"
+                                                    className="input-field w-full pl-12 bg-white/5 opacity-60 cursor-not-allowed"
+                                                    readOnly
                                                 />
                                             </div>
+                                            <p className="text-xs text-white/40 mt-1">Auto-filled from your admin profile</p>
                                         </div>
 
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -661,11 +1011,21 @@ const AdminDashboard = () => {
                                                         type="text"
                                                         value={formData.grade}
                                                         onChange={handleInputChange}
+                                                        onBlur={handleBlur}
                                                         placeholder="e.g., A+ or 3.8"
-                                                        className="input-field w-full pl-12"
+                                                        className={`input-field w-full pl-12 ${errors.grade ? 'border-red-500 focus:border-red-500/50' : ''}`}
                                                         required
                                                     />
                                                 </div>
+                                                {errors.grade && (
+                                                    <motion.p
+                                                        initial={{ opacity: 0, y: -5 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        className="text-red-400 text-xs mt-1"
+                                                    >
+                                                        ⚠️ {errors.grade}
+                                                    </motion.p>
+                                                )}
                                             </div>
                                             <div>
                                                 <label htmlFor="issueDate" className="block text-sm font-medium mb-2 text-white/70">
@@ -677,12 +1037,23 @@ const AdminDashboard = () => {
                                                         id="issueDate"
                                                         name="issueDate"
                                                         type="date"
+                                                        max={getTodayDateString()}
                                                         value={formData.issueDate}
                                                         onChange={handleInputChange}
-                                                        className="input-field w-full pl-12"
+                                                        onBlur={handleBlur}
+                                                        className={`input-field w-full pl-12 ${errors.issueDate ? 'border-red-500 focus:border-red-500/50' : ''}`}
                                                         required
                                                     />
                                                 </div>
+                                                {errors.issueDate && (
+                                                    <motion.p
+                                                        initial={{ opacity: 0, y: -5 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        className="text-red-400 text-xs mt-1"
+                                                    >
+                                                        ⚠️ {errors.issueDate}
+                                                    </motion.p>
+                                                )}
                                             </div>
                                         </div>
 
@@ -845,7 +1216,7 @@ const AdminDashboard = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filteredCertificates.map((cert) => (
+                                        {paginatedCertificates.map((cert) => (
                                             <tr key={cert.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                                                 <td className="py-4 px-4">
                                                     <p className="font-semibold">{cert.studentName}</p>
@@ -927,6 +1298,28 @@ const AdminDashboard = () => {
                                     <p className="text-white/50">No certificates found matching your criteria.</p>
                                 </div>
                             )}
+
+                            {filteredCertificates.length > CERTS_PER_PAGE && (
+                                <div className="flex justify-center gap-3 mt-6">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={certsPage <= 1}
+                                        onClick={() => setCertsPage(p => Math.max(1, p - 1))}
+                                    >
+                                        ← Previous
+                                    </Button>
+                                    <span className="text-white/50 text-sm py-2">Page {certsPage} of {totalCertsPages}</span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={certsPage >= totalCertsPages}
+                                        onClick={() => setCertsPage(p => p + 1)}
+                                    >
+                                        Next →
+                                    </Button>
+                                </div>
+                            )}
                         </Card>
                     )}
 
@@ -996,9 +1389,14 @@ const AdminDashboard = () => {
                                     ))}
                                 </div>
                             ) : (
-                                <div className="text-center py-12">
-                                    <span className="text-4xl mb-4 block">✅</span>
-                                    <p className="text-white/50">No pending transactions! All caught up.</p>
+                                <div className="text-center py-16 flex flex-col items-center justify-center">
+                                    <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-4 border border-emerald-500/20">
+                                        <span className="text-3xl text-emerald-400">⚡</span>
+                                    </div>
+                                    <h3 className="text-xl font-semibold mb-2">All Transactions Confirmed</h3>
+                                    <p className="text-white/50 max-w-md text-sm">
+                                        All blockchain transactions are successfully mined and confirmed. No transactions are currently pending in the mempool (Ganache instant-mining active).
+                                    </p>
                                 </div>
                             )}
                         </Card>
@@ -1010,45 +1408,77 @@ const AdminDashboard = () => {
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                                 <h2 className="text-2xl font-bold">📊 Activity / Audit Log</h2>
                                 <div className="flex gap-3">
-                                    <select className="input-field w-40">
+                                    <select
+                                        className="input-field w-48"
+                                        value={auditFilter}
+                                        onChange={(e) => { setAuditFilter(e.target.value); setAuditPage(1); }}
+                                    >
                                         <option value="all">All Actions</option>
-                                        <option value="issued">Certificate Issued</option>
-                                        <option value="revoked">Certificate Revoked</option>
-                                        <option value="login">Login</option>
+                                        <option value="certificate_issued">Certificate Issued</option>
+                                        <option value="certificate_revoked">Certificate Revoked</option>
+                                        <option value="certificate_deleted">Certificate Deleted</option>
+                                        <option value="certificate_status_changed">Status Changed</option>
+                                        <option value="bulk_issue">Bulk Issue</option>
                                     </select>
-                                    <input
-                                        type="date"
-                                        className="input-field w-40"
-                                    />
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => { setAuditPage(1); setAuditFilter('all'); }}
+                                    >
+                                        🔄 Refresh
+                                    </Button>
                                 </div>
                             </div>
 
                             <div className="space-y-3">
-                                {auditLog.map((log) => (
+                                {auditLog.length > 0 ? auditLog.map((log) => (
                                     <div key={log.id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors">
                                         <div className="flex items-center gap-4">
-                                            <span className={`w-2 h-2 rounded-full ${log.type === 'success' ? 'bg-green-400' :
-                                                log.type === 'warning' ? 'bg-orange-400' :
+                                            <span className={`w-2 h-2 rounded-full ${
+                                                log.action.includes('issued') ? 'bg-green-400' :
+                                                log.action.includes('revoked') ? 'bg-orange-400' :
+                                                log.action.includes('deleted') ? 'bg-red-400' :
                                                     'bg-blue-400'
                                                 }`}></span>
                                             <div>
-                                                <p className="font-semibold">{log.action}</p>
-                                                <p className="text-white/50 text-sm">{log.target}</p>
+                                                <p className="font-semibold">{log.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
+                                                <p className="text-white/50 text-sm">{log.target_name || log.details}</p>
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className="text-white/70 text-sm">{log.user}</p>
-                                            <p className="text-white/40 text-xs">{log.timestamp}</p>
+                                            <p className="text-white/70 text-sm">{log.user_name} <span className="text-white/40">({log.user_role})</span></p>
+                                            <p className="text-white/40 text-xs">{new Date(log.created_at).toLocaleString()}</p>
                                         </div>
                                     </div>
-                                ))}
+                                )) : (
+                                    <div className="text-center py-12">
+                                        <span className="text-4xl mb-4 block">📋</span>
+                                        <p className="text-white/50">No audit logs found. Actions will appear here as you issue, revoke, or delete certificates.</p>
+                                    </div>
+                                )}
                             </div>
 
-                            <div className="flex justify-center mt-6">
-                                <Button variant="outline" size="sm">
-                                    Load More
-                                </Button>
-                            </div>
+                            {auditTotal > 20 && (
+                                <div className="flex justify-center gap-3 mt-6">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={auditPage <= 1}
+                                        onClick={() => setAuditPage(p => Math.max(1, p - 1))}
+                                    >
+                                        ← Previous
+                                    </Button>
+                                    <span className="text-white/50 text-sm py-2">Page {auditPage} of {Math.ceil(auditTotal / 20)}</span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={auditPage >= Math.ceil(auditTotal / 20)}
+                                        onClick={() => setAuditPage(p => p + 1)}
+                                    >
+                                        Next →
+                                    </Button>
+                                </div>
+                            )}
                         </Card>
                     )}
 
@@ -1115,7 +1545,7 @@ const AdminDashboard = () => {
                                 <div className="mt-6 p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl">
                                     <p className="text-amber-400 text-sm font-medium mb-2">📋 Required CSV Format:</p>
                                     <code className="text-white/60 text-xs block bg-black/30 p-3 rounded-lg font-mono">
-                                        Student Name, Student ID, Degree Name, Issue Date
+                                        Registration No, Student Name, Degree Name, Grade, Issue Date
                                     </code>
                                 </div>
                             </Card>
@@ -1184,24 +1614,43 @@ const AdminDashboard = () => {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {csvData.slice(0, 20).map((row, index) => (
-                                                    <tr key={index} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                                                        <td className="py-3 px-4 text-white/40 text-sm">{index + 1}</td>
-                                                        {Object.values(row).map((value, vIndex) => (
-                                                            <td key={vIndex} className="py-3 px-4 text-white/80 text-sm">
-                                                                {value}
-                                                            </td>
-                                                        ))}
-                                                    </tr>
-                                                ))}
+                                                {paginatedCsvData.map((row, index) => {
+                                                    const globalIndex = (bulkPage - 1) * BULK_PER_PAGE + index + 1;
+                                                    return (
+                                                        <tr key={index} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                                                            <td className="py-3 px-4 text-white/40 text-sm">{globalIndex}</td>
+                                                            {Object.values(row).map((value, vIndex) => (
+                                                                <td key={vIndex} className="py-3 px-4 text-white/80 text-sm">
+                                                                    {value}
+                                                                </td>
+                                                            ))}
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>
 
-                                    {csvData.length > 20 && (
-                                        <p className="text-center text-white/40 text-sm mt-4">
-                                            Showing first 20 of {csvData.length} records
-                                        </p>
+                                    {csvData.length > BULK_PER_PAGE && (
+                                        <div className="flex justify-center gap-3 mt-6">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={bulkPage <= 1}
+                                                onClick={() => setBulkPage(p => Math.max(1, p - 1))}
+                                            >
+                                                ← Previous
+                                            </Button>
+                                            <span className="text-white/50 text-sm py-2">Page {bulkPage} of {totalBulkPages}</span>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={bulkPage >= totalBulkPages}
+                                                onClick={() => setBulkPage(p => p + 1)}
+                                            >
+                                                Next →
+                                            </Button>
+                                        </div>
                                     )}
                                 </Card>
                             )}
@@ -1209,6 +1658,70 @@ const AdminDashboard = () => {
                     )}
                 </motion.div>
             </div>
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteModal && certToDelete && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="max-w-md w-full"
+                    >
+                        <Card>
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold text-red-400">Confirm Deletion</h2>
+                                <button
+                                    onClick={() => {
+                                        setShowDeleteModal(false);
+                                        setCertToDelete(null);
+                                    }}
+                                    className="text-white/60 hover:text-white"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-center space-y-3">
+                                <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto text-2xl">
+                                    🗑️
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-lg text-white">Delete Certificate?</p>
+                                    <p className="text-sm text-red-400 mt-1">This action cannot be undone.</p>
+                                </div>
+                            </div>
+
+                            <div className="mb-6 text-center space-y-1">
+                                <p className="text-white/60 text-sm">You are about to permanently delete the certificate for:</p>
+                                <p className="font-semibold text-lg">{certToDelete.studentName}</p>
+                                <p className="text-white/50 text-sm">{certToDelete.degreeName}</p>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <Button
+                                    variant="secondary"
+                                    className="flex-1"
+                                    onClick={() => {
+                                        setShowDeleteModal(false);
+                                        setCertToDelete(null);
+                                    }}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    className="flex-1 bg-red-500 hover:bg-red-600"
+                                    onClick={confirmDelete}
+                                >
+                                    Delete Permanently
+                                </Button>
+                            </div>
+                        </Card>
+                    </motion.div>
+                </div>
+            )}
 
             {/* Revoke Certificate Modal */}
             {showRevokeModal && selectedCert && (

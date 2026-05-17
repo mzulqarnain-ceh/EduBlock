@@ -3,18 +3,33 @@ import { motion } from 'framer-motion';
 import Button from '../components/Button';
 import Card from '../components/Card';
 
+import { usersAPI } from '../services/api';
+
 const Settings = () => {
     const [user, setUser] = useState(null);
     const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
     const [showTemplateModal, setShowTemplateModal] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState(null);
 
-    // Get user from localStorage
+    // Get user from localStorage and fetch preferences
     React.useEffect(() => {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
             setUser(JSON.parse(storedUser));
         }
+        
+        // Fetch preferences from API
+        const fetchPreferences = async () => {
+            try {
+                const res = await usersAPI.getPreferences();
+                if (res.data.preferences && Object.keys(res.data.preferences).length > 0) {
+                    setEmailPreferences(res.data.preferences);
+                }
+            } catch (err) {
+                console.error("Failed to load preferences:", err);
+            }
+        };
+        fetchPreferences();
     }, []);
 
     // Email notification preferences
@@ -140,10 +155,20 @@ EduBlock Team`
         }));
     };
 
-    const handleSavePreferences = () => {
-        // Save to localStorage (mock backend call)
-        localStorage.setItem('emailPreferences', JSON.stringify(emailPreferences));
-        showNotification('Email preferences saved successfully!', 'success');
+    const [saving, setSaving] = useState(false);
+
+    const handleSavePreferences = async () => {
+        setSaving(true);
+        try {
+            await usersAPI.updatePreferences(emailPreferences);
+            // Also keep local fallback
+            localStorage.setItem('emailPreferences', JSON.stringify(emailPreferences));
+            showNotification('Email preferences saved successfully!', 'success');
+        } catch (err) {
+            showNotification('Failed to save preferences.', 'error');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleTestEmail = () => {
@@ -195,7 +220,7 @@ EduBlock Team`
 
     // Filter categories based on user role
     const filteredCategories = notificationCategories.filter(cat =>
-        cat.roles.includes(user?.role || 'student')
+        cat.roles.includes((user?.role || 'student').toLowerCase())
     );
 
     return (
@@ -291,6 +316,8 @@ EduBlock Team`
                         <div className="mt-8 flex justify-end">
                             <Button
                                 variant="primary"
+                                loading={saving}
+                                disabled={saving}
                                 onClick={handleSavePreferences}
                             >
                                 Save Preferences

@@ -12,6 +12,7 @@ const ContactUs = () => {
     });
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
     const handleChange = (e) => {
         setFormData({
@@ -22,6 +23,67 @@ const ContactUs = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setError('');
+        setSubmitted(false);
+
+        const { name, email, subject, message } = formData;
+
+        // 1. Name Validation
+        const trimmedName = name.trim();
+        if (trimmedName.length < 2 || trimmedName.length > 100) {
+            setError('Name must be between 2 and 100 characters.');
+            return;
+        }
+        const namePattern = /^[a-zA-Z\s.\-']+$/;
+        if (!namePattern.test(trimmedName)) {
+            setError('Name can only contain letters, spaces, hyphens, apostrophes, and periods.');
+            return;
+        }
+
+        // 2. Email Validation
+        const trimmedEmail = email.trim();
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailPattern.test(trimmedEmail)) {
+            setError('Please enter a valid email address (e.g. name@example.com).');
+            return;
+        }
+
+        // 3. Subject Validation
+        const trimmedSubject = subject.trim();
+        if (trimmedSubject.length < 3 || trimmedSubject.length > 150) {
+            setError('Subject must be between 3 and 150 characters.');
+            return;
+        }
+        const subjectPattern = /^[a-zA-Z0-9\s\-_!?.',()]+$/;
+        if (!subjectPattern.test(trimmedSubject)) {
+            setError('Subject contains invalid characters. Only letters, numbers, spaces, and basic punctuation are allowed.');
+            return;
+        }
+
+        // 4. Message Validation (Malicious Payload Checking)
+        const trimmedMessage = message.trim();
+        if (trimmedMessage.length < 10 || trimmedMessage.length > 1000) {
+            setError('Message must be between 10 and 1000 characters.');
+            return;
+        }
+
+        // Check for HTML/Script injection attempts (XSS)
+        if (/<script|javascript:|onload|onerror|alert\(/i.test(trimmedMessage) || /<[^>]*>/g.test(trimmedMessage)) {
+            setError('For security reasons, HTML tags or script injection attempts are not allowed in the message.');
+            return;
+        }
+
+        // Check for SQL injection patterns / keywords
+        const blacklistedKeywords = [
+            'select', 'union', 'insert', 'update', 'delete', 'drop', 'alter', 
+            'truncate', 'exec', '--', '/*', '*/', 'xp_cmdshell'
+        ];
+        const lowerMessage = trimmedMessage.toLowerCase();
+        if (blacklistedKeywords.some(keyword => lowerMessage.includes(keyword))) {
+            setError('Potentially unsafe or restricted database keywords detected. Please draft a standard message.');
+            return;
+        }
+
         setLoading(true);
 
         // Simulate form submission
@@ -129,6 +191,19 @@ const ContactUs = () => {
                                             </svg>
                                         </div>
                                         <span className="text-emerald-400 font-semibold">Message sent successfully! We'll get back to you soon.</span>
+                                    </motion.div>
+                                )}
+
+                                {error && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="mb-6 bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center gap-3"
+                                    >
+                                        <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center flex-shrink-0">
+                                            <span className="text-red-400 font-bold text-lg">⚠️</span>
+                                        </div>
+                                        <span className="text-red-400 font-semibold">{error}</span>
                                     </motion.div>
                                 )}
 

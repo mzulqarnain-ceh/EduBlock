@@ -5,7 +5,7 @@ import Button from '../components/Button';
 import Card from '../components/Card';
 import { generateCertificatePDF } from '../utils/pdfGenerator';
 import { openTransactionInExplorer } from '../utils/blockchain';
-import { degreesAPI } from '../services/api';
+import { degreesAPI, usersAPI } from '../services/api';
 
 const StudentDashboard = () => {
     const [showQRModal, setShowQRModal] = useState(false);
@@ -26,6 +26,8 @@ const StudentDashboard = () => {
         newPassword: '',
         confirmPassword: '',
     });
+    const [savingProfile, setSavingProfile] = useState(false);
+    const [profileImageFile, setProfileImageFile] = useState(null);
 
     // Get user from localStorage
     useEffect(() => {
@@ -44,13 +46,13 @@ const StudentDashboard = () => {
                     id: cert.id,
                     studentName: cert.student_name,
                     courseName: cert.degree_name,
-                    institution: 'EduBlock University',
+                    institution: cert.university_name || 'Unknown University',
                     grade: cert.grade || 'N/A',
                     issueDate: cert.issue_date,
-                    status: cert.status === 'issued' ? 'Issued' : cert.status === 'revoked' ? 'Revoked' : 'Pending',
+                    status: cert.status?.toLowerCase() === 'issued' ? 'Issued' : cert.status?.toLowerCase() === 'revoked' ? 'Revoked' : 'Pending',
                     hash: cert.blockchain_hash || '',
                     txHash: cert.tx_hash || '',
-                    txStatus: cert.status === 'issued' ? 'Confirmed' : 'Pending',
+                    txStatus: cert.status?.toLowerCase() === 'issued' ? 'Confirmed' : 'Pending',
                 }));
                 setCertificates(certs);
             } catch (err) {
@@ -65,22 +67,15 @@ const StudentDashboard = () => {
         setTimeout(() => setNotification({ show: false, message: '' }), 3000);
     };
 
-    const handleUpdateProfile = () => {
-        if (!profileData.name.trim()) {
-            showNotification('Name cannot be empty');
-            return;
-        }
-        if (!profileData.email.trim()) {
-            showNotification('Email cannot be empty');
-            return;
-        }
+    const handleUpdateProfile = async () => {
+        // 1. Password change validation
         if (profileData.newPassword || profileData.confirmPassword) {
             if (!profileData.currentPassword) {
                 showNotification('Please enter current password to set a new one');
                 return;
             }
-            if (profileData.newPassword.length < 6) {
-                showNotification('New password must be at least 6 characters');
+            if (profileData.newPassword.length < 6 || profileData.newPassword.length > 100) {
+                showNotification('New password must be between 6 and 100 characters');
                 return;
             }
             if (profileData.newPassword !== profileData.confirmPassword) {
@@ -88,12 +83,84 @@ const StudentDashboard = () => {
                 return;
             }
         }
-        const updatedUser = { ...user, name: profileData.name, email: profileData.email };
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-        setUser(updatedUser);
-        setProfileData(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
-        showNotification('Profile updated successfully!');
-        setShowProfileModal(false);
+
+        // 2. Profile Image validation
+        if (profileImageFile) {
+            const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+            const fileExtension = profileImageFile.name.split('.').pop().toLowerCase();
+            if (!allowedExtensions.includes(fileExtension)) {
+                showNotification('Invalid image format. Allowed formats: JPG, JPEG, PNG, GIF, WEBP');
+                return;
+            }
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (profileImageFile.size > maxSize) {
+                showNotification('Image file size must be less than 5MB');
+                return;
+            }
+        }
+
+        setSavingProfile(true);
+        let passwordUpdated = false;
+        let photoUpdated = false;
+        let newProfileImage = user?.profile_image;
+
+        try {
+            // 1. Update password if provided
+            if (profileData.newPassword) {
+                await usersAPI.updatePassword(profileData.currentPassword, profileData.newPassword);
+                passwordUpdated = true;
+            }
+        } catch (err) {
+            showNotification(err.response?.data?.detail || 'Failed to update password');
+            setSavingProfile(false);
+            return;
+        }
+
+        try {
+            // 2. Upload photo if provided
+            if (profileImageFile) {
+                const formData = new FormData();
+                formData.append('file', profileImageFile);
+                const res = await usersAPI.uploadPhoto(formData);
+                newProfileImage = res.data.profile_image;
+                photoUpdated = true;
+            }
+        } catch (err) {
+            showNotification(err.response?.data?.detail || 'Failed to upload profile photo');
+            if (passwordUpdated) {
+                setProfileData(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
+                showNotification('Password updated, but photo upload failed!');
+            }
+            setSavingProfile(false);
+            return;
+        }
+
+        try {
+            // 3. Update local storage and state
+            const updatedUser = { ...user, profile_image: newProfileImage };
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            setUser(updatedUser);
+
+            // Clear password fields on success
+            setProfileData(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
+            setProfileImageFile(null);
+
+            if (passwordUpdated && photoUpdated) {
+                showNotification('Password and profile photo updated successfully!');
+            } else if (passwordUpdated) {
+                showNotification('Password updated successfully!');
+            } else if (photoUpdated) {
+                showNotification('Profile photo updated successfully!');
+            } else {
+                showNotification('Profile saved successfully!');
+            }
+            
+            setShowProfileModal(false);
+        } catch (err) {
+            showNotification('Error saving profile changes locally');
+        } finally {
+            setSavingProfile(false);
+        }
     };
 
     // Filter and sort certificates
@@ -165,7 +232,7 @@ const StudentDashboard = () => {
                     </div>
 
                     {/* Stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
                         <Card>
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
@@ -185,17 +252,6 @@ const StudentDashboard = () => {
                                 <div>
                                     <p className="text-white/60 text-sm">Verified</p>
                                     <p className="text-2xl font-bold">{certificates.filter(c => c.status === 'Issued').length}</p>
-                                </div>
-                            </div>
-                        </Card>
-                        <Card>
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                                    <span className="text-2xl">⭐</span>
-                                </div>
-                                <div>
-                                    <p className="text-white/60 text-sm">Average Grade</p>
-                                    <p className="text-2xl font-bold">A</p>
                                 </div>
                             </div>
                         </Card>
@@ -324,10 +380,10 @@ const StudentDashboard = () => {
                                             className="w-full"
                                             onClick={() => {
                                                 setSelectedCert(cert);
-                                                setShowQRModal(true);
+                                                setShowDetailsModal(true);
                                             }}
                                         >
-                                            👁️ View QR Code
+                                            👁️ View Details
                                         </Button>
                                         <div className="grid grid-cols-2 gap-2">
                                             <Button
@@ -338,17 +394,7 @@ const StudentDashboard = () => {
                                                     showNotification('PDF downloaded successfully!');
                                                 }}
                                             >
-                                                📥 PDF
-                                            </Button>
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={() => {
-                                                    setSelectedCert(cert);
-                                                    setShowShareModal(true);
-                                                }}
-                                            >
-                                                🔗 Share
+                                                📥 Download PDF
                                             </Button>
                                             <Button
                                                 variant="secondary"
@@ -358,14 +404,7 @@ const StudentDashboard = () => {
                                                     showNotification('Certificate hash copied!');
                                                 }}
                                             >
-                                                📋 Copy
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => openTransactionInExplorer(cert.txHash)}
-                                            >
-                                                ⛓️ Chain
+                                                📋 Copy Hash
                                             </Button>
                                         </div>
                                     </div>
@@ -638,36 +677,21 @@ const StudentDashboard = () => {
                             </div>
 
                             {/* Action Buttons */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+                            <div className="grid grid-cols-2 gap-3 mt-6">
                                 <Button
                                     variant="primary"
-                                    onClick={() => generateCertificatePDF(selectedCert)}
-                                >
-                                    📄 Download PDF
-                                </Button>
-                                <Button
-                                    variant="secondary"
                                     onClick={() => {
                                         setShowDetailsModal(false);
                                         setShowShareModal(true);
                                     }}
                                 >
-                                    🔗 Share
+                                    🔗 Share Certificate
                                 </Button>
                                 <Button
                                     variant="secondary"
                                     onClick={() => openTransactionInExplorer(selectedCert.txHash)}
                                 >
-                                    ⛓️ Blockchain
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(selectedCert.hash);
-                                        showNotification('Certificate hash copied!');
-                                    }}
-                                >
-                                    📋 Copy Hash
+                                    ⛓️ View on Blockchain
                                 </Button>
                             </div>
                         </Card>
@@ -681,7 +705,7 @@ const StudentDashboard = () => {
                     initial={{ opacity: 0, y: -50 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -50 }}
-                    className="fixed top-24 right-4 z-50"
+                    className="fixed top-24 right-4 z-[100]"
                 >
                     <div className="bg-green-500/20 border border-green-500 rounded-lg p-4 flex items-center gap-3 backdrop-blur-md">
                         <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -719,19 +743,34 @@ const StudentDashboard = () => {
 
                             {/* Profile Picture Section - Compact */}
                             <div className="flex items-center gap-4 mb-4 pb-4 border-b border-white/10">
-                                <div className="w-16 h-16 bg-gradient-to-r from-amber-500 to-emerald-500 rounded-full flex items-center justify-center text-2xl flex-shrink-0">
-                                    {profileData.name ? profileData.name.charAt(0).toUpperCase() : '👤'}
+                                <div className="w-16 h-16 bg-gradient-to-r from-amber-500 to-emerald-500 rounded-full flex items-center justify-center text-2xl flex-shrink-0 overflow-hidden">
+                                    {(profileImageFile || user?.profile_image) ? (
+                                        <img 
+                                            src={profileImageFile ? URL.createObjectURL(profileImageFile) : `http://127.0.0.1:8000${user.profile_image}`} 
+                                            alt="Profile" 
+                                            className="w-full h-full object-cover"
+                                        />
+                                    ) : (
+                                        profileData.name ? profileData.name.charAt(0).toUpperCase() : '👤'
+                                    )}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="font-semibold truncate">{profileData.name || 'Student'}</p>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="mt-1 text-xs px-2 py-1"
-                                        onClick={() => showNotification('Photo upload coming soon!')}
-                                    >
-                                        📷 Change Photo
-                                    </Button>
+                                    <label className="cursor-pointer inline-block mt-1">
+                                        <span className="text-xs px-2 py-1 border border-white/20 rounded hover:bg-white/10 transition-colors">
+                                            📷 {user?.profile_image || profileImageFile ? 'Change Photo' : 'Upload Image'}
+                                        </span>
+                                        <input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            className="hidden" 
+                                            onChange={(e) => {
+                                                if (e.target.files && e.target.files[0]) {
+                                                    setProfileImageFile(e.target.files[0]);
+                                                }
+                                            }}
+                                        />
+                                    </label>
                                 </div>
                             </div>
 
@@ -742,17 +781,17 @@ const StudentDashboard = () => {
                                     <input
                                         type="text"
                                         value={profileData.name}
-                                        onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                                        className="input-field w-full py-2 text-sm"
+                                        disabled
+                                        className="input-field w-full py-2 text-sm opacity-50 cursor-not-allowed"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-white/60 text-xs mb-1">Email</label>
+                                    <label className="block text-white/60 text-xs mb-1">Email / Registration No</label>
                                     <input
-                                        type="email"
+                                        type="text"
                                         value={profileData.email}
-                                        onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                                        className="input-field w-full py-2 text-sm"
+                                        disabled
+                                        className="input-field w-full py-2 text-sm opacity-50 cursor-not-allowed"
                                     />
                                 </div>
 
@@ -790,6 +829,8 @@ const StudentDashboard = () => {
                                     variant="primary"
                                     className="flex-1"
                                     size="sm"
+                                    loading={savingProfile}
+                                    disabled={savingProfile}
                                     onClick={handleUpdateProfile}
                                 >
                                     💾 Save

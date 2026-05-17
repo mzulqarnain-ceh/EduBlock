@@ -9,23 +9,19 @@ const SuperAdminDashboard = () => {
     const [universities, setUniversities] = useState([]);
 
     const [showAddModal, setShowAddModal] = useState(false);
-    const [showRoleModal, setShowRoleModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
-    const [showAddUserModal, setShowAddUserModal] = useState(false);
     const [selectedUniversity, setSelectedUniversity] = useState(null);
     const [notification, setNotification] = useState({ show: false, type: '', message: '' });
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [universityToDelete, setUniversityToDelete] = useState(null);
+    const [showUserDeleteModal, setShowUserDeleteModal] = useState(false);
+    const [userToDelete, setUserToDelete] = useState(null);
     const [searchParams] = useSearchParams();
     const validTabs = ['universities', 'users', 'settings', 'analytics'];
     const initialTab = validTabs.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'universities';
     const [activeTab, setActiveTab] = useState(initialTab);
 
-    // New User Form State
-    const [newUser, setNewUser] = useState({
-        name: '',
-        email: '',
-        role: 'student',
-        password: '',
-    });
+
 
     // User Management State
     const [users, setUsers] = useState([]);
@@ -52,6 +48,9 @@ const SuperAdminDashboard = () => {
         thisMonth: 0,
         verifications: 0,
         activeUsers: 0,
+        monthly_issued: [],
+        university_issued: [],
+        recent_activity: []
     });
 
     // Fetch all data from backend
@@ -69,7 +68,7 @@ const SuperAdminDashboard = () => {
                     id: u.id,
                     name: u.name,
                     email: u.email,
-                    status: u.status === 'active' ? 'Active' : 'Inactive',
+                    status: u.status?.toLowerCase() === 'active' ? 'Active' : 'Inactive',
                     students: u.students || 0,
                 })));
 
@@ -79,7 +78,9 @@ const SuperAdminDashboard = () => {
                     name: u.name,
                     email: u.email,
                     role: u.role,
-                    status: u.status === 'active' ? 'Active' : u.status === 'suspended' ? 'Suspended' : 'Inactive',
+                    status: u.status?.toLowerCase() === 'active' ? 'Active' : 
+                            u.status?.toLowerCase() === 'suspended' ? 'Suspended' : 
+                            u.status?.toLowerCase() === 'pending' ? 'Pending' : 'Inactive',
                     lastLogin: u.last_login || 'Never',
                     selected: false,
                 })));
@@ -88,9 +89,12 @@ const SuperAdminDashboard = () => {
                 const s = statsRes.data;
                 setAnalytics({
                     totalCertificates: s.total_certificates || 0,
-                    thisMonth: s.total_certificates || 0,
+                    thisMonth: s.monthly_issued?.length > 0 ? s.monthly_issued[s.monthly_issued.length - 1].count : 0,
                     verifications: 0,
                     activeUsers: s.total_users || 0,
+                    monthly_issued: s.monthly_issued || [],
+                    university_issued: s.university_issued || [],
+                    recent_activity: s.recent_activity || []
                 });
 
             } catch (err) {
@@ -114,12 +118,6 @@ const SuperAdminDashboard = () => {
         status: 'Active',
     });
 
-    const [roleAssignment, setRoleAssignment] = useState({
-        userName: '',
-        userEmail: '',
-        role: 'viewer',
-    });
-
     const showNotification = (type, message) => {
         setNotification({ show: true, type, message });
         setTimeout(() => setNotification({ show: false, type: '', message: '' }), 3000);
@@ -127,10 +125,103 @@ const SuperAdminDashboard = () => {
 
     const handleAddUniversity = async (e) => {
         e.preventDefault();
+
+        // 1. Inputs cleanup
+        const trimmedName = newUniversity.name ? String(newUniversity.name).trim() : '';
+        const trimmedEmail = newUniversity.email ? String(newUniversity.email).trim() : '';
+        const trimmedAdminName = newUniversity.adminName ? String(newUniversity.adminName).trim() : '';
+        const trimmedPassword = newUniversity.password ? String(newUniversity.password).trim() : '';
+
+        // Injection Scanner Helper
+        const scanInjections = (val, fieldName) => {
+            if (!val) return null;
+            const lower = String(val).toLowerCase();
+            const sqlKeywords = ['select ', 'union ', 'insert ', 'update ', 'delete ', 'drop ', 'alter ', '--', '/*', 'xp_cmdshell'];
+            for (const kw of sqlKeywords) {
+                if (lower.includes(kw)) {
+                    return `Unsafe database keywords detected in ${fieldName}.`;
+                }
+            }
+            const xssPatterns = ['<script', 'javascript:', 'onload', 'onerror'];
+            for (const pattern of xssPatterns) {
+                if (lower.includes(pattern)) {
+                    return `Unsafe HTML or script tags detected in ${fieldName}.`;
+                }
+            }
+            return null;
+        };
+
+        // 2. University Name Validation
+        if (!trimmedName) {
+            showNotification('error', "University name is required.");
+            return;
+        }
+        if (trimmedName.length < 3 || trimmedName.length > 100) {
+            showNotification('error', "University name must be between 3 and 100 characters.");
+            return;
+        }
+        const nameErr = scanInjections(trimmedName, "University Name");
+        if (nameErr) {
+            showNotification('error', nameErr);
+            return;
+        }
+        const nameRegex = /^[a-zA-Z0-9\s.()'/&-]+$/;
+        if (!nameRegex.test(trimmedName)) {
+            showNotification('error', "University name must only contain alphanumeric characters, spaces, and standard symbols.");
+            return;
+        }
+
+        // 3. Admin Email Validation
+        if (!trimmedEmail) {
+            showNotification('error', "Admin email is required.");
+            return;
+        }
+        if (trimmedEmail.length < 3 || trimmedEmail.length > 100) {
+            showNotification('error', "Admin email must be between 3 and 100 characters.");
+            return;
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(trimmedEmail)) {
+            showNotification('error', "Please enter a valid email address.");
+            return;
+        }
+
+        // 4. Admin Name Validation
+        if (!trimmedAdminName) {
+            showNotification('error', "Admin name is required.");
+            return;
+        }
+        if (trimmedAdminName.length < 2 || trimmedAdminName.length > 100) {
+            showNotification('error', "Admin name must be between 2 and 100 characters.");
+            return;
+        }
+        const adminNameErr = scanInjections(trimmedAdminName, "Admin Name");
+        if (adminNameErr) {
+            showNotification('error', adminNameErr);
+            return;
+        }
+        const adminNameRegex = /^[a-zA-Z\s.'-]+$/;
+        if (!adminNameRegex.test(trimmedAdminName)) {
+            showNotification('error', "Admin name must only contain letters, spaces, or dots.");
+            return;
+        }
+
+        // 5. Default Password Validation
+        if (!trimmedPassword) {
+            showNotification('error', "Default password is required.");
+            return;
+        }
+        if (trimmedPassword.length < 6 || trimmedPassword.length > 100) {
+            showNotification('error', "Default password must be between 6 and 100 characters.");
+            return;
+        }
+
         try {
             const res = await universitiesAPI.create({
-                name: newUniversity.name,
-                email: newUniversity.email,
+                name: trimmedName,
+                email: trimmedEmail,
+                admin_name: trimmedAdminName,
+                admin_password: trimmedPassword,
             });
             const uni = res.data;
             setUniversities(prev => [...prev, {
@@ -140,6 +231,25 @@ const SuperAdminDashboard = () => {
                 status: 'Active',
                 students: 0,
             }]);
+
+            // Refresh users list to show the new admin
+            try {
+                const usersRes = await usersAPI.list();
+                setUsers(usersRes.data.map(u => ({
+                    id: u.id,
+                    name: u.name,
+                    email: u.email,
+                    role: u.role,
+                    status: u.status?.toLowerCase() === 'active' ? 'Active' : 
+                            u.status?.toLowerCase() === 'suspended' ? 'Suspended' : 
+                            u.status?.toLowerCase() === 'pending' ? 'Pending' : 'Inactive',
+                    lastLogin: u.last_login || 'Never',
+                    selected: false,
+                })));
+            } catch (err) {
+                console.error('Failed to refresh users:', err);
+            }
+
             setNewUniversity({ name: '', email: '', adminName: '', password: '' });
             setShowAddModal(false);
             showNotification('success', `${uni.name} has been added successfully!`);
@@ -148,35 +258,62 @@ const SuperAdminDashboard = () => {
         }
     };
 
-    const handleDeleteUniversity = async (id) => {
+    const handleDeleteUniversity = (id) => {
         const university = universities.find(uni => uni.id === id);
         if (!university) {
             showNotification('error', 'University not found!');
             return;
         }
-        if (window.confirm(`Are you sure you want to delete ${university.name}?`)) {
-            try {
-                await universitiesAPI.delete(id);
-                setUniversities(universities.filter(uni => uni.id !== id));
-                showNotification('success', `${university.name} has been deleted.`);
-            } catch (err) {
-                showNotification('error', err.response?.data?.detail || 'Failed to delete university.');
-            }
+        setUniversityToDelete(university);
+        setShowDeleteModal(true);
+    };
+
+    const confirmDeleteUniversity = async () => {
+        if (!universityToDelete) return;
+        try {
+            await universitiesAPI.delete(universityToDelete.id);
+            setUniversities(universities.filter(uni => uni.id !== universityToDelete.id));
+            showNotification('success', `${universityToDelete.name} has been deleted.`);
+            setShowDeleteModal(false);
+            setUniversityToDelete(null);
+        } catch (err) {
+            showNotification('error', err.response?.data?.detail || 'Failed to delete university.');
         }
     };
 
-    const handleAssignRole = (e) => {
-        e.preventDefault();
-        const roleName = roleAssignment.role.charAt(0).toUpperCase() + roleAssignment.role.slice(1);
-        showNotification('success', `Role "${roleName}" assigned to ${roleAssignment.userName} successfully!`);
-        setRoleAssignment({ userName: '', userEmail: '', role: 'viewer' });
-        setShowRoleModal(false);
+    const handleDeleteUser = (user) => {
+        setUserToDelete(user);
+        setShowUserDeleteModal(true);
     };
 
-    const openRoleModal = (university) => {
-        setSelectedUniversity(university);
-        setShowRoleModal(true);
+    const confirmDeleteUser = async () => {
+        if (!userToDelete) return;
+        try {
+            await usersAPI.delete(userToDelete.id);
+            setUsers(prev => prev.filter(u => u.id !== userToDelete.id));
+            showNotification('success', `${userToDelete.name} has been deleted.`);
+            setShowUserDeleteModal(false);
+            setUserToDelete(null);
+        } catch (err) {
+            showNotification('error', err.response?.data?.detail || 'Failed to delete user');
+        }
     };
+
+    const handleToggleUserStatus = async (user) => {
+        const nextStatus = user.status === 'Active' ? 'inactive' : 'active';
+        try {
+            await usersAPI.updateStatus(user.id, nextStatus);
+            const displayStatus = nextStatus === 'active' ? 'Active' : 'Inactive';
+            setUsers(prev => prev.map(u =>
+                u.id === user.id ? { ...u, status: displayStatus } : u
+            ));
+            showNotification('success', `${user.name} status updated to ${displayStatus}.`);
+        } catch (err) {
+            showNotification('error', err.response?.data?.detail || 'Failed to update user status.');
+        }
+    };
+
+
 
     const openEditModal = (university) => {
         setEditUniversity({
@@ -202,7 +339,7 @@ const SuperAdminDashboard = () => {
     const handleToggleStatus = async (id) => {
         try {
             const res = await universitiesAPI.toggleStatus(id);
-            const newStatus = res.data.status === 'active' ? 'Active' : 'Inactive';
+            const newStatus = res.data.status?.toLowerCase() === 'active' ? 'Active' : 'Inactive';
             setUniversities(universities.map(uni =>
                 uni.id === id ? { ...uni, status: newStatus } : uni
             ));
@@ -212,11 +349,26 @@ const SuperAdminDashboard = () => {
         }
     };
 
+    const formatTimeAgo = (dateString) => {
+        if (!dateString) return 'Never';
+        const date = new Date(dateString);
+        const now = new Date();
+        const seconds = Math.floor((now - date) / 1000);
+        
+        if (seconds < 60) return 'just now';
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        return `${days}d ago`;
+    };
+
     const stats = {
-        totalUniversities: universities.length,
+        totalUniversities: analytics.totalUniversities || universities.length,
         activeUniversities: universities.filter(u => u.status === 'Active').length,
-        totalStudents: universities.reduce((sum, uni) => sum + uni.students, 0),
-        totalDegrees: 2891,
+        totalStudents: analytics.activeUsers || universities.reduce((sum, uni) => sum + uni.students, 0),
+        totalDegrees: analytics.totalCertificates || 0,
     };
 
     return (
@@ -240,11 +392,7 @@ const SuperAdminDashboard = () => {
                                 + Add University
                             </Button>
                         )}
-                        {activeTab === 'users' && (
-                            <Button variant="primary" onClick={() => setShowAddUserModal(true)}>
-                                + Add User
-                            </Button>
-                        )}
+
                     </div>
 
                     {/* Tab Navigation */}
@@ -307,7 +455,7 @@ const SuperAdminDashboard = () => {
                                             <span className="text-2xl">🎓</span>
                                         </div>
                                         <div>
-                                            <p className="text-white/60 text-sm">Total Students</p>
+                                            <p className="text-white/60 text-sm">Total Users</p>
                                             <p className="text-3xl font-bold">{stats.totalStudents}</p>
                                         </div>
                                     </div>
@@ -367,13 +515,7 @@ const SuperAdminDashboard = () => {
                                                             >
                                                                 Edit
                                                             </Button>
-                                                            <Button
-                                                                variant="secondary"
-                                                                size="sm"
-                                                                onClick={() => openRoleModal(uni)}
-                                                            >
-                                                                Assign Role
-                                                            </Button>
+
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"
@@ -456,7 +598,7 @@ const SuperAdminDashboard = () => {
                                                         <p className="text-white/50 text-xs">{user.email}</p>
                                                     </td>
                                                     <td className="py-4 px-4">
-                                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${user.role === 'admin'
+                                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${user.role?.toLowerCase() === 'admin'
                                                             ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
                                                             : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                                                             }`}>
@@ -464,12 +606,18 @@ const SuperAdminDashboard = () => {
                                                         </span>
                                                     </td>
                                                     <td className="py-4 px-4">
-                                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${user.status === 'Active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                                                            user.status === 'Inactive' ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30' :
-                                                                'bg-red-500/20 text-red-400 border border-red-500/30'
-                                                            }`}>
+                                                        <button
+                                                            onClick={() => handleToggleUserStatus(user)}
+                                                            className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer transition-all hover:scale-105 ${
+                                                                user.status === 'Active' ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30' :
+                                                                user.status === 'Pending' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30' :
+                                                                user.status === 'Inactive' ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30 hover:bg-gray-500/30' :
+                                                                'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                                                            }`}
+                                                            title="Click to toggle status"
+                                                        >
                                                             {user.status}
-                                                        </span>
+                                                        </button>
                                                     </td>
                                                     <td className="py-4 px-4 text-white/60 text-sm">{user.lastLogin}</td>
                                                     <td className="py-4 px-4">
@@ -478,41 +626,56 @@ const SuperAdminDashboard = () => {
                                                                 <Button
                                                                     variant="outline"
                                                                     size="sm"
-                                                                    onClick={() => {
-                                                                        setUsers(prev => prev.map(u =>
-                                                                            u.id === user.id ? { ...u, status: 'Active' } : u
-                                                                        ));
-                                                                        showNotification('success', `${user.name} is now Active.`);
+                                                                    onClick={async () => {
+                                                                        try {
+                                                                            await usersAPI.updateStatus(user.id, 'active');
+                                                                            setUsers(prev => prev.map(u =>
+                                                                                u.id === user.id ? { ...u, status: 'Active' } : u
+                                                                            ));
+                                                                            showNotification('success', `${user.name} is now Active.`);
+                                                                        } catch (err) {
+                                                                            showNotification('error', err.response?.data?.detail || 'Failed to update status');
+                                                                        }
                                                                     }}
                                                                     className="border-green-500 text-green-400 hover:bg-green-500/10"
                                                                 >
-                                                                    ✓ Active
+                                                                    ✓ {user.status === 'Pending' ? 'Approve' : 'Active'}
                                                                 </Button>
                                                             )}
-                                                            {user.status !== 'Inactive' && user.status !== 'Suspended' && (
+                                                            {user.status !== 'Inactive' && user.status !== 'Suspended' && user.status !== 'Pending' && (
                                                                 <Button
                                                                     variant="outline"
                                                                     size="sm"
-                                                                    onClick={() => {
-                                                                        setUsers(prev => prev.map(u =>
-                                                                            u.id === user.id ? { ...u, status: 'Inactive' } : u
-                                                                        ));
-                                                                        showNotification('success', `${user.name} is now Inactive.`);
+                                                                    onClick={async () => {
+                                                                        try {
+                                                                            await usersAPI.updateStatus(user.id, 'inactive');
+                                                                            setUsers(prev => prev.map(u =>
+                                                                                u.id === user.id ? { ...u, status: 'Inactive' } : u
+                                                                            ));
+                                                                            showNotification('success', `${user.name} is now Inactive.`);
+                                                                        } catch (err) {
+                                                                            showNotification('error', err.response?.data?.detail || 'Failed to update status');
+                                                                        }
                                                                     }}
                                                                     className="border-gray-500 text-gray-400 hover:bg-gray-500/10"
                                                                 >
                                                                     ⦾ Inactive
                                                                 </Button>
                                                             )}
-                                                            {user.status !== 'Suspended' && (
+                                                            {user.status !== 'Suspended' && user.status !== 'Pending' && (
                                                                 <Button
                                                                     variant="outline"
                                                                     size="sm"
-                                                                    onClick={() => {
-                                                                        setUsers(prev => prev.map(u =>
-                                                                            u.id === user.id ? { ...u, status: 'Suspended' } : u
-                                                                        ));
-                                                                        showNotification('success', `${user.name} has been suspended.`);
+                                                                    onClick={async () => {
+                                                                        try {
+                                                                            await usersAPI.updateStatus(user.id, 'suspended');
+                                                                            setUsers(prev => prev.map(u =>
+                                                                                u.id === user.id ? { ...u, status: 'Suspended' } : u
+                                                                            ));
+                                                                            showNotification('success', `${user.name} has been suspended.`);
+                                                                        } catch (err) {
+                                                                            showNotification('error', err.response?.data?.detail || 'Failed to suspend');
+                                                                        }
                                                                     }}
                                                                     className="border-orange-500 text-orange-400 hover:bg-orange-500/10"
                                                                 >
@@ -522,12 +685,7 @@ const SuperAdminDashboard = () => {
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"
-                                                                onClick={() => {
-                                                                    if (window.confirm(`Delete ${user.name}?`)) {
-                                                                        setUsers(prev => prev.filter(u => u.id !== user.id));
-                                                                        showNotification('success', `${user.name} has been deleted.`);
-                                                                    }
-                                                                }}
+                                                                onClick={() => handleDeleteUser(user)}
                                                                 className="border-red-500 text-red-400 hover:bg-red-500/10"
                                                             >
                                                                 🗑 Delete
@@ -738,23 +896,25 @@ const SuperAdminDashboard = () => {
                                 <Card>
                                     <h3 className="text-xl font-bold mb-4">📊 Monthly Certificates Issued</h3>
                                     <div className="space-y-3">
-                                        {[
-                                            { month: 'October', value: 189, color: 'bg-amber-500' },
-                                            { month: 'November', value: 234, color: 'bg-emerald-500' },
-                                            { month: 'December', value: 198, color: 'bg-blue-500' },
-                                            { month: 'January', value: 256, color: 'bg-purple-500' },
-                                        ].map((item, idx) => (
-                                            <div key={idx} className="flex items-center gap-4">
-                                                <span className="w-20 text-white/60 text-sm">{item.month}</span>
-                                                <div className="flex-1 bg-white/10 rounded-full h-4">
-                                                    <div
-                                                        className={`${item.color} h-4 rounded-full transition-all`}
-                                                        style={{ width: `${(item.value / 300) * 100}%` }}
-                                                    ></div>
-                                                </div>
-                                                <span className="w-12 text-right font-semibold">{item.value}</span>
-                                            </div>
-                                        ))}
+                                        {analytics.monthly_issued.length > 0 ? (
+                                            analytics.monthly_issued.map((item, idx) => {
+                                                const colors = ['bg-amber-500', 'bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500'];
+                                                return (
+                                                    <div key={idx} className="flex items-center gap-4">
+                                                        <span className="w-20 text-white/60 text-sm">{item.month}</span>
+                                                        <div className="flex-1 bg-white/10 rounded-full h-4">
+                                                            <div
+                                                                className={`${colors[idx % colors.length]} h-4 rounded-full transition-all`}
+                                                                style={{ width: `${Math.min((item.count / Math.max(...analytics.monthly_issued.map(m => m.count), 1)) * 100, 100)}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        <span className="w-12 text-right font-semibold">{item.count}</span>
+                                                    </div>
+                                                );
+                                            })
+                                        ) : (
+                                            <p className="text-white/40 text-center py-8">No data available for the last 6 months</p>
+                                        )}
                                     </div>
                                 </Card>
 
@@ -762,18 +922,22 @@ const SuperAdminDashboard = () => {
                                 <Card>
                                     <h3 className="text-xl font-bold mb-4">🏛️ Certificates by University</h3>
                                     <div className="space-y-3">
-                                        {universities.map((uni, idx) => (
-                                            <div key={idx} className="flex items-center gap-4">
-                                                <span className="w-32 text-white/60 text-sm truncate">{uni.name}</span>
-                                                <div className="flex-1 bg-white/10 rounded-full h-4">
-                                                    <div
-                                                        className="bg-gradient-to-r from-amber-500 to-emerald-500 h-4 rounded-full"
-                                                        style={{ width: `${(uni.students / 1500) * 100}%` }}
-                                                    ></div>
+                                        {analytics.university_issued.length > 0 ? (
+                                            analytics.university_issued.map((uni, idx) => (
+                                                <div key={idx} className="flex items-center gap-4">
+                                                    <span className="w-32 text-white/60 text-sm truncate">{uni.name}</span>
+                                                    <div className="flex-1 bg-white/10 rounded-full h-4">
+                                                        <div
+                                                            className="bg-gradient-to-r from-amber-500 to-emerald-500 h-4 rounded-full"
+                                                            style={{ width: `${Math.min((uni.count / Math.max(...analytics.university_issued.map(u => u.count), 1)) * 100, 100)}%` }}
+                                                        ></div>
+                                                    </div>
+                                                    <span className="w-12 text-right font-semibold">{uni.count}</span>
                                                 </div>
-                                                <span className="w-12 text-right font-semibold">{uni.students}</span>
-                                            </div>
-                                        ))}
+                                            ))
+                                        ) : (
+                                            <p className="text-white/40 text-center py-8">No universities with issued degrees</p>
+                                        )}
                                     </div>
                                 </Card>
                             </div>
@@ -782,26 +946,26 @@ const SuperAdminDashboard = () => {
                             <Card>
                                 <h3 className="text-xl font-bold mb-4">📋 Recent System Activity</h3>
                                 <div className="space-y-3">
-                                    {[
-                                        { action: 'Certificate Issued', user: 'Tech University', time: '2 minutes ago', type: 'success' },
-                                        { action: 'User Registered', user: 'john@student.edu', time: '15 minutes ago', type: 'info' },
-                                        { action: 'Certificate Verified', user: 'External Verifier', time: '1 hour ago', type: 'success' },
-                                        { action: 'Certificate Revoked', user: 'Science Institute', time: '3 hours ago', type: 'warning' },
-                                        { action: 'Admin Login', user: 'admin@techuni.edu', time: '5 hours ago', type: 'info' },
-                                    ].map((item, idx) => (
-                                        <div key={idx} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
-                                            <div className="flex items-center gap-3">
-                                                <span className={`w-2 h-2 rounded-full ${item.type === 'success' ? 'bg-green-400' :
-                                                    item.type === 'warning' ? 'bg-orange-400' : 'bg-blue-400'
+                                    {analytics.recent_activity.length > 0 ? (
+                                        analytics.recent_activity.map((item, idx) => (
+                                            <div key={idx} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5 hover:border-white/10 transition-all">
+                                                <div className="flex items-center gap-3">
+                                                    <span className={`w-2 h-2 rounded-full ${
+                                                        item.type === 'success' ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.5)]' :
+                                                        item.type === 'warning' ? 'bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.5)]' : 
+                                                        'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.5)]'
                                                     }`}></span>
-                                                <div>
-                                                    <p className="font-semibold">{item.action}</p>
-                                                    <p className="text-white/50 text-sm">{item.user}</p>
+                                                    <div>
+                                                        <p className="font-semibold text-sm sm:text-base">{item.action}</p>
+                                                        <p className="text-white/50 text-xs sm:text-sm">{item.user}</p>
+                                                    </div>
                                                 </div>
+                                                <span className="text-white/40 text-xs sm:text-sm whitespace-nowrap">{formatTimeAgo(item.time)}</span>
                                             </div>
-                                            <span className="text-white/40 text-sm">{item.time}</span>
-                                        </div>
-                                    ))}
+                                        ))
+                                    ) : (
+                                        <p className="text-white/40 text-center py-8">No recent activity found</p>
+                                    )}
                                 </div>
                             </Card>
                         </div>
@@ -995,11 +1159,15 @@ const SuperAdminDashboard = () => {
                         </div>
                     )}
 
-                    {/* Assign Role Modal */}
-                    {showRoleModal && (
+
+
+
+
+                    {/* Delete Confirmation Modal */}
+                    {showDeleteModal && (
                         <div
                             className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-                            onClick={() => setShowRoleModal(false)}
+                            onClick={() => setShowDeleteModal(false)}
                         >
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.95 }}
@@ -1008,93 +1176,43 @@ const SuperAdminDashboard = () => {
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <Card>
-                                    <div className="flex justify-between items-center mb-6">
-                                        <h2 className="text-2xl font-bold">Assign User Role</h2>
-                                        <button
-                                            onClick={() => setShowRoleModal(false)}
-                                            className="text-white/60 hover:text-white"
-                                        >
-                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    <div className="flex flex-col items-center text-center p-4">
+                                        <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-4">
+                                            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                             </svg>
-                                        </button>
-                                    </div>
-
-                                    {selectedUniversity && (
-                                        <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                                            <p className="text-sm text-blue-400">Assigning role for:</p>
-                                            <p className="font-semibold">{selectedUniversity.name}</p>
                                         </div>
-                                    )}
-
-                                    <form onSubmit={handleAssignRole} className="space-y-4">
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2 text-white/80">
-                                                User Name
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={roleAssignment.userName}
-                                                onChange={(e) => setRoleAssignment({ ...roleAssignment, userName: e.target.value })}
-                                                placeholder="Enter user name"
-                                                className="input-field"
-                                                required
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2 text-white/80">
-                                                User Email
-                                            </label>
-                                            <input
-                                                type="email"
-                                                value={roleAssignment.userEmail}
-                                                onChange={(e) => setRoleAssignment({ ...roleAssignment, userEmail: e.target.value })}
-                                                placeholder="user@example.com"
-                                                className="input-field"
-                                                required
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2 text-white/80">
-                                                Assign Role
-                                            </label>
-                                            <select
-                                                value={roleAssignment.role}
-                                                onChange={(e) => setRoleAssignment({ ...roleAssignment, role: e.target.value })}
-                                                className="input-field"
-                                            >
-                                                <option value="viewer">Viewer (Read Only)</option>
-                                                <option value="issuer">Issuer (Can Issue Degrees)</option>
-                                                <option value="admin">Admin (Full Access)</option>
-                                            </select>
-                                        </div>
-
-                                        <div className="flex gap-3 pt-4">
+                                        <h2 className="text-2xl font-bold mb-2">Are you sure?</h2>
+                                        <p className="text-white/60 mb-8">
+                                            Do you really want to delete <span className="text-white font-semibold">{universityToDelete?.name}</span>? This action cannot be undone.
+                                        </p>
+                                        <div className="flex gap-3 w-full">
                                             <Button
-                                                type="button"
                                                 variant="secondary"
-                                                onClick={() => setShowRoleModal(false)}
+                                                onClick={() => setShowDeleteModal(false)}
                                                 className="flex-1"
                                             >
-                                                Cancel
+                                                No, Keep it
                                             </Button>
-                                            <Button type="submit" variant="primary" className="flex-1">
-                                                Assign Role
+                                            <Button
+                                                variant="primary"
+                                                onClick={confirmDeleteUniversity}
+                                                className="flex-1 bg-red-500 hover:bg-red-600 border-none text-white"
+                                            >
+                                                Yes, Delete
                                             </Button>
                                         </div>
-                                    </form>
+                                    </div>
                                 </Card>
                             </motion.div>
                         </div>
                     )}
 
-                    {/* Add User Modal */}
-                    {showAddUserModal && (
+                    {/* User Delete Confirmation Modal */}
+                    {showUserDeleteModal && (
                         <div
                             className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-                            onClick={() => setShowAddUserModal(false)}
+                            onClick={() => setShowUserDeleteModal(false)}
                         >
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.95 }}
@@ -1103,107 +1221,33 @@ const SuperAdminDashboard = () => {
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <Card>
-                                    <div className="flex justify-between items-center mb-6">
-                                        <h2 className="text-2xl font-bold">Add New User</h2>
-                                        <button
-                                            onClick={() => setShowAddUserModal(false)}
-                                            className="text-white/60 hover:text-white"
-                                        >
-                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    <div className="flex flex-col items-center text-center p-4">
+                                        <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-4">
+                                            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                             </svg>
-                                        </button>
-                                    </div>
-
-                                    <form
-                                        onSubmit={(e) => {
-                                            e.preventDefault();
-                                            if (newUser.name && newUser.email) {
-                                                setUsers(prev => [...prev, {
-                                                    id: Date.now(),
-                                                    name: newUser.name,
-                                                    email: newUser.email,
-                                                    role: newUser.role,
-                                                    status: 'Active',
-                                                    lastLogin: 'Never'
-                                                }]);
-                                                showNotification('success', `User ${newUser.name} added successfully!`);
-                                                setNewUser({ name: '', email: '', role: 'student', password: '' });
-                                                setShowAddUserModal(false);
-                                            }
-                                        }}
-                                        className="space-y-4"
-                                    >
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2 text-white/80">
-                                                Full Name
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={newUser.name}
-                                                onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                                                placeholder="Enter full name"
-                                                className="input-field w-full"
-                                                required
-                                            />
                                         </div>
-
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2 text-white/80">
-                                                Email Address
-                                            </label>
-                                            <input
-                                                type="email"
-                                                value={newUser.email}
-                                                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                                                placeholder="user@example.com"
-                                                className="input-field w-full"
-                                                required
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2 text-white/80">
-                                                Role
-                                            </label>
-                                            <select
-                                                value={newUser.role}
-                                                onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                                                className="input-field w-full"
-                                            >
-                                                <option value="student">Student</option>
-                                                <option value="admin">Admin</option>
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2 text-white/80">
-                                                Password
-                                            </label>
-                                            <input
-                                                type="password"
-                                                value={newUser.password}
-                                                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                                                placeholder="Create password"
-                                                className="input-field w-full"
-                                                required
-                                            />
-                                        </div>
-
-                                        <div className="flex gap-3 pt-4">
+                                        <h2 className="text-2xl font-bold mb-2">Delete User?</h2>
+                                        <p className="text-white/60 mb-8">
+                                            Are you sure you want to delete <span className="text-white font-semibold">{userToDelete?.name}</span>? This action will permanently remove the user from the system.
+                                        </p>
+                                        <div className="flex gap-3 w-full">
                                             <Button
-                                                type="button"
                                                 variant="secondary"
-                                                onClick={() => setShowAddUserModal(false)}
+                                                onClick={() => setShowUserDeleteModal(false)}
                                                 className="flex-1"
                                             >
                                                 Cancel
                                             </Button>
-                                            <Button type="submit" variant="primary" className="flex-1">
-                                                Add User
+                                            <Button
+                                                variant="primary"
+                                                onClick={confirmDeleteUser}
+                                                className="flex-1 bg-red-500 hover:bg-red-600 border-none text-white"
+                                            >
+                                                Delete User
                                             </Button>
                                         </div>
-                                    </form>
+                                    </div>
                                 </Card>
                             </motion.div>
                         </div>

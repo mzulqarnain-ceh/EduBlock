@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import Button from '../components/Button';
 import Card from '../components/Card';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
 import { openTransactionInExplorer } from '../utils/blockchain';
 import { generateCertificatePDF } from '../utils/pdfGenerator';
 import { verifyAPI } from '../services/api';
@@ -17,35 +17,60 @@ const Verification = () => {
     const [shareCopied, setShareCopied] = useState(false);
     const inputRef = useRef(null);
 
-    // Auto-focus the input field on page load
-    useEffect(() => {
-        if (inputRef.current) {
-            inputRef.current.focus();
-        }
-    }, []);
-
-    const handleVerify = async () => {
-        if (!certificateId.trim()) {
+    const performVerification = async (inputVal) => {
+        const input = inputVal.trim();
+        
+        // Reset error state
+        setError('');
+        
+        if (!input) {
+            setResult(null);
             setError('Please enter a certificate ID');
             return;
         }
 
+        // 1. Character whitelist check (blocks single quotes, semicolons, angle brackets, equals, etc.)
+        const safePattern = /^[a-zA-Z0-9\s\-_@./]{1,100}$/;
+        if (!safePattern.test(input)) {
+            setResult(null);
+            setError('Invalid format. Only letters, numbers, spaces, and - _ @ . / are allowed (max 100 characters).');
+            return;
+        }
+
+        // 2. Blacklisted SQL/Script injection keywords check
+        const blacklistedKeywords = [
+            'select', 'union', 'insert', 'update', 'delete', 'drop', 'alter', 
+            'truncate', 'exec', 'script', '--', '/*', '*/', 'xp_cmdshell'
+        ];
+        const lowerInput = input.toLowerCase();
+        if (blacklistedKeywords.some(keyword => lowerInput.includes(keyword))) {
+            setResult(null);
+            setError('Potentially malicious characters or keywords detected. Please enter a valid certificate ID.');
+            return;
+        }
+
+        // 3. Format Enforce: Must be either numeric Token ID or Hex Hash (starting with 0x)
+        const isTokenId = /^\d+$/.test(input);
+        const isHash = /^0x[a-fA-F0-9]{40,66}$/i.test(input);
+
+        if (!isTokenId && !isHash) {
+            setResult(null);
+            setError('For security and privacy, you must search using a valid Blockchain Hash (starting with 0x) or numeric Token ID. Registration numbers or Student IDs cannot be used.');
+            return;
+        }
+
         setLoading(true);
-        setError('');
         setResult(null);
 
         try {
             // Call backend API for verification
-            const input = certificateId.trim();
             const requestData = {};
 
-            // Determine if input is token ID, tx hash, or certificate ID
-            if (/^\d+$/.test(input)) {
+            // Determine if input is token ID or tx hash
+            if (isTokenId) {
                 requestData.token_id = parseInt(input);
-            } else if (input.startsWith('0x')) {
-                requestData.tx_hash = input;
             } else {
-                requestData.certificate_id = input;
+                requestData.tx_hash = input;
             }
 
             const response = await verifyAPI.verify(requestData);
@@ -56,7 +81,7 @@ const Verification = () => {
                     valid: true,
                     studentName: data.degree.student_name,
                     courseName: data.degree.degree_name,
-                    institution: 'EduBlock University',
+                    institution: data.degree.university_name || 'Unknown University',
                     grade: data.degree.grade || 'N/A',
                     issueDate: data.degree.issue_date,
                     hash: data.degree.blockchain_hash || '',
@@ -79,11 +104,30 @@ const Verification = () => {
                 });
             }
         } catch (err) {
-            setError('Network error. Please check your connection and try again.');
+            const errorMsg = err.response?.data?.detail || 'Network error. Please check your connection and try again.';
+            setError(errorMsg);
         } finally {
             setLoading(false);
         }
     };
+
+    const handleVerify = () => {
+        performVerification(certificateId);
+    };
+
+    // Auto-focus the input field and check for URL hash parameter on page load
+    useEffect(() => {
+        if (inputRef.current) {
+            inputRef.current.focus();
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const hashParam = params.get('hash');
+        if (hashParam) {
+            setCertificateId(hashParam);
+            performVerification(hashParam);
+        }
+    }, []);
 
     const handleStartScanner = () => {
         setShowScanner(true);
@@ -129,6 +173,26 @@ const Verification = () => {
         };
     }, [showScanner]);
 
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        try {
+            const html5QrCode = new Html5Qrcode("hidden-qr-reader");
+            const decodedText = await html5QrCode.scanFile(file, true);
+            
+            const hashMatch = decodedText.match(/hash=([a-fA-F0-9x]+)/);
+            const extractedHash = hashMatch ? hashMatch[1] : decodedText;
+            
+            setCertificateId(extractedHash);
+            setError('');
+            html5QrCode.clear();
+        } catch (err) {
+            console.error(err);
+            setError("Could not read QR code from image.");
+        }
+    };
+
     return (
         <div className="min-h-screen pt-32 pb-20">
             <div className="container-custom">
@@ -171,27 +235,34 @@ const Verification = () => {
                                 )}
                             </div>
 
-                            <div className="flex gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                                 <Button
                                     variant="primary"
                                     size="lg"
                                     onClick={handleVerify}
                                     disabled={loading}
                                     loading={loading}
-                                    className="flex-1"
+                                    className="sm:col-span-3 shadow-lg shadow-amber-500/10"
                                 >
-                                    {loading ? 'Verifying...' : 'Verify Certificate'}
+                                    <span className="flex items-center justify-center gap-2">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                        </svg>
+                                        {loading ? 'Verifying...' : 'Verify Certificate'}
+                                    </span>
                                 </Button>
                                 <Button
                                     variant="outline"
                                     size="lg"
                                     onClick={handleStartScanner}
                                     disabled={loading}
-                                    className="px-6"
+                                    className="sm:col-span-1 flex items-center justify-center gap-2 border-amber-500/50 hover:bg-amber-500/10"
                                 >
-                                    📷 Scan QR
+                                    <span className="text-xl">📷</span>
+                                    <span>Scan</span>
                                 </Button>
                             </div>
+                            <div id="hidden-qr-reader" style={{ display: 'none' }}></div>
                         </div>
                     </Card>
 
@@ -473,52 +544,77 @@ const Verification = () => {
                             ))}
                         </div>
                     )}
+
+                    {/* QR Scanner Modal */}
+                    {showScanner && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                className="max-w-md w-full"
+                            >
+                                <Card className="border-amber-500/30 shadow-2xl shadow-amber-500/10 overflow-hidden">
+                                    <div className="p-1">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-amber-500/20 rounded-xl flex items-center justify-center">
+                                                    <span className="text-xl">📷</span>
+                                                </div>
+                                                <div>
+                                                    <h2 className="text-xl font-bold">QR Scanner</h2>
+                                                    <p className="text-white/40 text-xs">Scan or upload an image</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={handleStopScanner}
+                                                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-red-500/20 hover:text-red-400 transition-all group"
+                                            >
+                                                <svg className="w-5 h-5 transition-transform group-hover:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+
+                                        {/* Scanner Container */}
+                                        <div className="relative rounded-2xl overflow-hidden bg-black/40 border border-white/5 aspect-square mb-6 group">
+                                            <div id="qr-reader" className="w-full h-full"></div>
+                                            
+                                            {/* Scanner Overlay Decoration (Visible when active) */}
+                                            <div className="absolute inset-0 pointer-events-none border-[2px] border-amber-500/20 rounded-2xl">
+                                                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-amber-500 rounded-tl-xl"></div>
+                                                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-amber-500 rounded-tr-xl"></div>
+                                                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-amber-500 rounded-bl-xl"></div>
+                                                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-amber-500 rounded-br-xl"></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <div className="bg-white/5 rounded-xl p-4 flex items-center gap-4 border border-white/5">
+                                                <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center text-blue-400">
+                                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="text-sm text-white/80 font-medium">Auto-detection active</p>
+                                                    <p className="text-xs text-white/40">Point camera at QR code or stop to select file</p>
+                                                </div>
+                                            </div>
+
+                                            <Button
+                                                variant="secondary"
+                                                className="w-full py-4 border-white/10 hover:bg-white/10"
+                                                onClick={handleStopScanner}
+                                            >
+                                                Close Scanner
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </Card>
+                            </motion.div>
+                        </div>
+                    )}
                 </motion.div>
-
-                {/* QR Scanner Modal */}
-                {showScanner && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="max-w-md w-full"
-                        >
-                            <Card>
-                                <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-2xl font-bold">Scan QR Code</h2>
-                                    <button
-                                        onClick={handleStopScanner}
-                                        className="text-white/60 hover:text-white"
-                                    >
-                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                    </button>
-                                </div>
-
-                                <p className="text-white/60 text-sm mb-4">
-                                    Position the QR code within the frame to scan
-                                </p>
-
-                                {/* Scanner Container */}
-                                <div id="qr-reader" className="mb-4"></div>
-
-                                <div className="text-center text-sm text-white/50">
-                                    <p>📷 Allow camera access when prompted</p>
-                                    <p className="mt-2">Hash will be auto-filled after scanning</p>
-                                </div>
-
-                                <Button
-                                    variant="secondary"
-                                    className="w-full mt-4"
-                                    onClick={handleStopScanner}
-                                >
-                                    Cancel
-                                </Button>
-                            </Card>
-                        </motion.div>
-                    </div>
-                )}
             </div>
         </div>
     );

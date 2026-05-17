@@ -4,10 +4,18 @@ from sqlalchemy import func
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.university import University, UniversityStatus
+from app.models.degree import Degree
 from app.schemas.university import UniversityCreate, UniversityUpdate, UniversityResponse
 from app.utils.security import require_role
 
 router = APIRouter(prefix="/api/universities", tags=["University Management"])
+
+
+@router.get("/public")
+def list_universities_public(db: Session = Depends(get_db)):
+    """Publicly list universities for registration."""
+    universities = db.query(University).filter(University.status == UniversityStatus.ACTIVE).all()
+    return [{"id": u.id, "name": u.name} for u in universities]
 
 
 @router.get("/")
@@ -44,11 +52,16 @@ def create_university(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("superadmin")),
 ):
-    """Add a new university. Super Admin only."""
+    """Add a new university and create a default admin user for it."""
+    from app.models.user import UserStatus
+    from app.utils.security import hash_password
+    from app.services.email_service import send_university_admin_credentials_email
+    
     existing = db.query(University).filter(University.email == request.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="University email already exists")
 
+    # 1. Create University
     university = University(
         name=request.name,
         email=request.email,
@@ -59,12 +72,35 @@ def create_university(
     db.commit()
     db.refresh(university)
 
+    # 2. Create Default Admin User
+    admin_name = request.admin_name or f"{request.name} Admin"
+    admin_password = request.admin_password or "Admin123!"
+    
+    admin_user = User(
+        name=admin_name,
+        email=request.email,  # Same email as university
+        password_hash=hash_password(admin_password),
+        role=UserRole.ADMIN,
+        university_id=university.id,
+        status=UserStatus.ACTIVE,
+    )
+    db.add(admin_user)
+    db.commit()
+
+    # 3. Send Credentials Email
+    send_university_admin_credentials_email(
+        admin_email=admin_user.email,
+        admin_name=admin_user.name,
+        university_name=university.name,
+        password=admin_password
+    )
+
     return {
         "id": university.id,
         "name": university.name,
         "email": university.email,
         "status": university.status.value,
-        "message": f"University '{university.name}' added successfully!",
+        "message": f"University '{university.name}' added successfully! Admin credentials sent to {university.email}.",
     }
 
 
@@ -98,14 +134,41 @@ def delete_university(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("superadmin")),
 ):
-    """Delete a university. Super Admin only."""
+    """Delete a university. Also deletes its admins but keeps students (detached)."""
     university = db.query(University).filter(University.id == uni_id).first()
     if not university:
         raise HTTPException(status_code=404, detail="University not found")
 
+    # 1. Get associated users first to handle references
+    associated_users = db.query(User).filter(User.university_id == uni_id).all()
+    admin_ids = [u.id for u in associated_users if u.role == UserRole.ADMIN or str(u.role).upper() == "ADMIN"]
+
+    # 2. Detach DEGREES (nullify FKs but keep the records)
+    # Get all degrees that either belong to this university or were issued by someone from this university
+    db.query(Degree).filter(
+        (Degree.university_id == uni_id) | (Degree.issued_by.in_(admin_ids))
+    ).update({"university_id": None, "issued_by": None}, synchronize_session=False)
+
+    # 3. Nullify audit log references for users being deleted (Admins)
+    if admin_ids:
+        from app.models.audit_log import AuditLog
+        db.query(AuditLog).filter(AuditLog.user_id.in_(admin_ids)).update({"user_id": None}, synchronize_session=False)
+
+    # 4. Delete associated ADMIN users
+    if admin_ids:
+        db.query(User).filter(User.id.in_(admin_ids)).delete(synchronize_session=False)
+
+    # 5. Detach STUDENTS (keep their accounts but set university_id to null)
+    db.query(User).filter(
+        User.university_id == uni_id, 
+        User.role == UserRole.STUDENT
+    ).update({"university_id": None}, synchronize_session=False)
+
+    # 6. Delete the University
     db.delete(university)
     db.commit()
-    return {"message": f"University '{university.name}' deleted successfully"}
+    
+    return {"message": f"University '{university.name}' and its admins deleted. Students and degrees preserved."}
 
 
 @router.put("/{uni_id}/toggle-status")

@@ -432,3 +432,88 @@ select.input-field {
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(20px);
 }
+
+/* HTML5 QR Scanner Custom Styles */
+#qr-reader {
+  border: none !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-radius: 1rem !important;
+  overflow: hidden !important;
+  padding: 1rem !important;
+}
+
+#qr-reader img {
+  display: none !important;
+}
+
+#qr-reader__dashboard {
+  padding: 1.5rem !important;
+  background: transparent !important;
+}
+
+#qr-reader__status_span {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+}
+
+#qr-reader button {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: white !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  padding: 0.625rem 1.25rem !important;
+  border-radius: 0.75rem !important;
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  margin: 0.5rem !important;
+  text-transform: none !important;
+}
+
+#qr-reader button:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: #fbbf24 !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 15px rgba(251, 191, 36, 0.2) !important;
+}
+
+#html5-qrcode-button-camera-start {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
+  color: #0a0a0a !important;
+  border: none !important;
+}
+
+#html5-qrcode-button-camera-stop {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+}
+
+#html5-qrcode-button-camera-stop:hover {
+  background: rgba(239, 68, 68, 0.25) !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2) !important;
+}
+
+#qr-reader__camera_selection {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: white !important;
+  padding: 0.5rem !important;
+  border-radius: 0.5rem !important;
+  margin: 0.5rem !important;
+  outline: none !important;
+}
+
+#qr-reader__camera_selection option {
+  background: #1a1a1a !important;
+  color: white !important;
+}
+
+#qr-reader__scan_region {
+  border-radius: 1rem !important;
+  overflow: hidden !important;
+  border: 2px solid rgba(251, 191, 36, 0.3) !important;
+}

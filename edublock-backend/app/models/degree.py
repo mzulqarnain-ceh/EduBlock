@@ -6,9 +6,9 @@ from app.database import Base
 
 
 class DegreeStatus(str, enum.Enum):
-    PENDING = "pending"
-    ISSUED = "issued"
-    REVOKED = "revoked"
+    PENDING = "PENDING"
+    ISSUED = "ISSUED"
+    REVOKED = "REVOKED"
 
 
 class Degree(Base):
@@ -21,8 +21,10 @@ class Degree(Base):
     degree_name = Column(String(255), nullable=False)
     grade = Column(String(50), nullable=True)
     issue_date = Column(String(50), nullable=False)
-    university_id = Column(Integer, ForeignKey("universities.id"), nullable=False)
-    issued_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    university_id = Column(Integer, ForeignKey("universities.id"), nullable=True)
+    university_name = Column(String(255), nullable=True)  # Store name for persistence
+    issued_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    student_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     # Blockchain fields
     ipfs_hash = Column(String(255), nullable=True)

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import { authAPI } from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 const Login = ({ onLogin }) => {
     const [searchParams] = useSearchParams();
@@ -15,9 +16,12 @@ const Login = ({ onLogin }) => {
         role: roleFromUrl || 'student',
     });
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [showForgotModal, setShowForgotModal] = useState(false);
+    const [forgotEmail, setForgotEmail] = useState('');
+    const [forgotLoading, setForgotLoading] = useState(false);
     const navigate = useNavigate();
+    const toast = useToast();
 
     // Update role if URL param changes
     useEffect(() => {
@@ -36,11 +40,32 @@ const Login = ({ onLogin }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        setError('');
+
+        const emailVal = formData.email.trim();
+
+        // 1. Character whitelist check for Email/Registration input
+        const safePattern = /^[a-zA-Z0-9@.\-_\/]{3,100}$/;
+        if (!safePattern.test(emailVal)) {
+            toast.error('Invalid format. Only letters, numbers, @, ., -, _, and / are allowed (max 100 characters).');
+            setLoading(false);
+            return;
+        }
+
+        // 2. Blacklisted SQL keywords check
+        const blacklistedKeywords = [
+            'select', 'union', 'insert', 'update', 'delete', 'drop', 'alter', 
+            'truncate', 'exec', '--', '/*', '*/', 'xp_cmdshell'
+        ];
+        const lowerEmail = emailVal.toLowerCase();
+        if (blacklistedKeywords.some(keyword => lowerEmail.includes(keyword))) {
+            toast.error('Potentially unsafe characters or database keywords detected.');
+            setLoading(false);
+            return;
+        }
 
         try {
             // Call backend API for authentication
-            const response = await authAPI.login(formData.email, formData.password, formData.role);
+            const response = await authAPI.login(emailVal, formData.password, formData.role);
             const { access_token, user } = response.data;
 
             // Store token and user data
@@ -50,19 +75,46 @@ const Login = ({ onLogin }) => {
             if (onLogin) onLogin(user);
 
             setLoading(false);
+            toast.success('Login successful!');
 
-            // Redirect based on role
-            if (user.role === 'superadmin') {
+            // Redirect based on role (case-insensitive)
+            const role = user.role?.toLowerCase();
+            if (role === 'superadmin') {
                 navigate('/superadmin');
-            } else if (user.role === 'admin') {
+            } else if (role === 'admin') {
                 navigate('/admin');
             } else {
                 navigate('/student');
             }
         } catch (err) {
             const errorMsg = err.response?.data?.detail || 'Login failed. Please try again.';
-            setError(errorMsg);
+            toast.error(errorMsg);
             setLoading(false);
+        }
+    };
+
+    const handleForgotPassword = async (e) => {
+        e.preventDefault();
+
+        const emailVal = forgotEmail.trim();
+
+        // Strict Email Format Check
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailPattern.test(emailVal) || emailVal.length > 100) {
+            toast.error('Please enter a valid email address.');
+            return;
+        }
+
+        setForgotLoading(true);
+        try {
+            const res = await authAPI.forgotPassword(emailVal);
+            toast.success(res.data.message || 'If that email exists, a reset link has been sent.');
+            setForgotEmail('');
+            setShowForgotModal(false);
+        } catch (err) {
+            toast.error('Something went wrong. Please try again.');
+        } finally {
+            setForgotLoading(false);
         }
     };
 
@@ -108,18 +160,20 @@ const Login = ({ onLogin }) => {
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.3 }}
                         >
-                            <label htmlFor="email" className="block text-sm font-medium mb-2 text-white/70">
-                                Email Address
-                            </label>
+                            <div className="flex justify-between items-center mb-2">
+                                <label htmlFor="email" className="block text-sm font-medium text-white/70">
+                                    Email or Registration No
+                                </label>
+                            </div>
                             <div className="relative">
                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 z-10">📧</span>
                                 <input
                                     id="email"
                                     name="email"
-                                    type="email"
+                                    type="text"
                                     value={formData.email}
                                     onChange={handleChange}
-                                    placeholder="your.email@example.com"
+                                    placeholder="Enter email or roll no"
                                     className="input-field pl-12"
                                     required
                                 />
@@ -131,9 +185,18 @@ const Login = ({ onLogin }) => {
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.4 }}
                         >
-                            <label htmlFor="password" className="block text-sm font-medium mb-2 text-white/70">
-                                Password
-                            </label>
+                            <div className="flex justify-between items-center mb-2">
+                                <label htmlFor="password" className="block text-sm font-medium text-white/70">
+                                    Password
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowForgotModal(true)}
+                                    className="text-xs text-amber-400 hover:text-amber-300 transition-colors"
+                                >
+                                    Forgot Password?
+                                </button>
+                            </div>
                             <div className="relative">
                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 z-10">🔑</span>
                                 <input
@@ -206,21 +269,6 @@ const Login = ({ onLogin }) => {
                             </div>
                         </motion.div>
 
-                        {/* Error Message */}
-                        {error && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center gap-3"
-                            >
-                                <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                                    <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                                <span className="text-red-400 text-sm font-medium">{error}</span>
-                            </motion.div>
-                        )}
 
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
@@ -265,6 +313,61 @@ const Login = ({ onLogin }) => {
                     </div>
                 </Card>
             </motion.div>
+
+            {/* Forgot Password Modal */}
+            {showForgotModal && (
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4"
+                    onClick={() => setShowForgotModal(false)}
+                >
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="max-w-md w-full"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <Card>
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold">Reset Password</h2>
+                                <button
+                                    onClick={() => setShowForgotModal(false)}
+                                    className="text-white/60 hover:text-white transition-colors"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleForgotPassword} className="space-y-4">
+                                    <p className="text-white/60 text-sm mb-4">
+                                        Enter your email address and we'll send you a link to reset your password.
+                                    </p>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-2 text-white/80">Email</label>
+                                        <input
+                                            type="email"
+                                            value={forgotEmail}
+                                            onChange={(e) => setForgotEmail(e.target.value)}
+                                            className="input-field w-full"
+                                            placeholder="your.email@example.com"
+                                            required
+                                        />
+                                    </div>
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        className="w-full"
+                                        loading={forgotLoading}
+                                        disabled={forgotLoading}
+                                    >
+                                        Send Reset Link
+                                    </Button>
+                                </form>
+                        </Card>
+                    </motion.div>
+                </div>
+            )}
         </div>
     );
 };

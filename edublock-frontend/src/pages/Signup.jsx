@@ -3,7 +3,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Button from '../components/Button';
 import Card from '../components/Card';
-import { authAPI } from '../services/api';
+import { authAPI, universitiesAPI } from '../services/api';
+import { useToast } from '../context/ToastContext';
+import { useEffect } from 'react';
 
 const Signup = () => {
     const [formData, setFormData] = useState({
@@ -13,13 +15,26 @@ const Signup = () => {
         confirmPassword: '',
         role: 'student',
         registrationNo: '',
+        universityId: '',
     });
+    const [universities, setUniversities] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const navigate = useNavigate();
+    const toast = useToast();
+
+    useEffect(() => {
+        const fetchUniversities = async () => {
+            try {
+                const res = await universitiesAPI.listPublic();
+                setUniversities(res.data);
+            } catch (err) {
+                console.error("Failed to load universities:", err);
+            }
+        };
+        fetchUniversities();
+    }, []);
 
     // Password strength calculator
     const getPasswordStrength = (password) => {
@@ -43,39 +58,76 @@ const Signup = () => {
             ...formData,
             [e.target.name]: e.target.value,
         });
-        setError('');
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Email validation
+        // 1. Name Validation
+        const trimmedName = formData.name.trim();
+        if (trimmedName.length < 2 || trimmedName.length > 100) {
+            toast.error('Name must be between 2 and 100 characters.');
+            return;
+        }
+        const namePattern = /^[a-zA-Z\s.\-']+$/;
+        if (!namePattern.test(trimmedName)) {
+            toast.error('Name can only contain letters, spaces, hyphens, periods, and apostrophes.');
+            return;
+        }
+
+        // 2. Email Validation
+        const trimmedEmail = formData.email.trim();
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(formData.email)) {
-            setError('Please enter a valid email address');
+        if (!emailRegex.test(trimmedEmail) || trimmedEmail.length > 100) {
+            toast.error('Please enter a valid email address.');
             return;
         }
 
-        // Password validation
-        if (formData.password.length < 6) {
-            setError('Password must be at least 6 characters long');
+        // 3. Registration Number Validation (if Student)
+        let trimmedRegNo = '';
+        if (formData.role === 'student') {
+            trimmedRegNo = formData.registrationNo.trim();
+            if (trimmedRegNo.length < 3 || trimmedRegNo.length > 50) {
+                toast.error('Registration number must be between 3 and 50 characters.');
+                return;
+            }
+            const regPattern = /^[a-zA-Z0-9\-_\/.]{3,50}$/;
+            if (!regPattern.test(trimmedRegNo)) {
+                toast.error('Registration number can only contain letters, numbers, hyphens, underscores, dots, and slashes.');
+                return;
+            }
+        }
+
+        // 4. University Validation (if Admin)
+        if (formData.role === 'admin' && !formData.universityId) {
+            toast.error('Please select your university.');
             return;
         }
 
-        // Password match validation
+        // 5. Malicious Injections checking (Name & Registration number)
+        const blacklistedKeywords = [
+            'select', 'union', 'insert', 'update', 'delete', 'drop', 'alter', 
+            'truncate', 'exec', '--', '/*', '*/', 'xp_cmdshell'
+        ];
+        const inputsToScan = [trimmedName.toLowerCase(), trimmedRegNo.toLowerCase()];
+        if (inputsToScan.some(input => blacklistedKeywords.some(keyword => input.includes(keyword)))) {
+            toast.error('Potentially unsafe characters or database keywords detected.');
+            return;
+        }
+
+        // 6. Password validation
+        if (formData.password.length < 6 || formData.password.length > 100) {
+            toast.error('Password must be between 6 and 100 characters long.');
+            return;
+        }
+
+        // 7. Password match validation
         if (formData.password !== formData.confirmPassword) {
-            setError('Passwords do not match');
-            return;
-        }
-
-        // Name validation
-        if (formData.name.trim().length < 3) {
-            setError('Name must be at least 3 characters long');
+            toast.error('Passwords do not match.');
             return;
         }
 
         setLoading(true);
-        setError('');
 
         try {
             // Call backend API to register
@@ -84,10 +136,16 @@ const Signup = () => {
                 email: formData.email,
                 password: formData.password,
                 role: formData.role,
+                registration_no: formData.role === 'student' ? formData.registrationNo : null,
+                university_id: formData.universityId ? parseInt(formData.universityId) : null,
             });
 
             setLoading(false);
-            setSuccess(true);
+            if (formData.role === 'admin') {
+                toast.success('Account created successfully! Your account is pending approval by the Super Admin.');
+            } else {
+                toast.success('Account created successfully! Redirecting to login...');
+            }
 
             // Redirect to login after 2 seconds
             setTimeout(() => {
@@ -95,8 +153,8 @@ const Signup = () => {
             }, 2000);
         } catch (err) {
             setLoading(false);
-            const errorMsg = err.response?.data?.detail || 'Registration failed. Please try again.';
-            setError(errorMsg);
+            const errorMsg = err.response?.data?.detail || err.message || 'Registration failed. Please try again.';
+            toast.error(errorMsg);
         }
     };
 
@@ -134,36 +192,6 @@ const Signup = () => {
                         </h1>
                         <p className="text-white/50">Join EduBlock and get started</p>
                     </div>
-
-                    {error && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            className="mb-6 bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center gap-3"
-                        >
-                            <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                                <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            </div>
-                            <span className="text-red-400 text-sm font-medium">{error}</span>
-                        </motion.div>
-                    )}
-
-                    {success && (
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="mb-6 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 flex items-center gap-3"
-                        >
-                            <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                                <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                            </div>
-                            <span className="text-emerald-400 text-sm font-medium">Account created successfully! Redirecting to login...</span>
-                        </motion.div>
-                    )}
 
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <motion.div
@@ -254,12 +282,42 @@ const Signup = () => {
                             </div>
                         </motion.div>
 
+                        {formData.role === 'admin' && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.3 }}
+                            >
+                                <label htmlFor="universityId" className="block text-sm font-medium mb-2 text-white/70">
+                                    Select University
+                                </label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 z-10">🏛️</span>
+                                    <select
+                                        id="universityId"
+                                        name="universityId"
+                                        value={formData.universityId}
+                                        onChange={handleChange}
+                                        className="input-field pl-12"
+                                        required
+                                    >
+                                        <option value="">Select your institution</option>
+                                        {universities.map(uni => (
+                                            <option key={uni.id} value={uni.id}>{uni.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </motion.div>
+                        )}
+
                         {formData.role === 'student' && (
                             <motion.div
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: 'auto' }}
                                 exit={{ opacity: 0, height: 0 }}
                                 transition={{ duration: 0.3 }}
+                                className="mb-4"
                             >
                                 <label htmlFor="registrationNo" className="block text-sm font-medium mb-2 text-white/70">
                                     Registration Number

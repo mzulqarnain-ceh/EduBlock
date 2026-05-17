@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Button from './Button';
 
-const Navigation = ({ walletAddress, onConnectWallet }) => {
+const Navigation = ({ walletAddress, onConnectWallet, onDisconnectWallet }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [user, setUser] = useState(null);
     const [scrolled, setScrolled] = useState(false);
     const [activeSection, setActiveSection] = useState('');
+    const [isWalletHovered, setIsWalletHovered] = useState(false);
     const userMenuRef = useRef(null);
     const location = useLocation();
     const navigate = useNavigate();
@@ -93,6 +94,9 @@ const Navigation = ({ walletAddress, onConnectWallet }) => {
         localStorage.removeItem('user');
         setUser(null);
         setShowUserMenu(false);
+        if (onDisconnectWallet) {
+            onDisconnectWallet();
+        }
         navigate('/');
     };
 
@@ -141,19 +145,19 @@ const Navigation = ({ walletAddress, onConnectWallet }) => {
                         <button onClick={() => scrollToSection('faq')} className={sectionLinkClass('faq')}>
                             FAQ
                         </button>
-                        {user && user.role === 'superadmin' && (
+                        {user && user.role?.toLowerCase() === 'superadmin' && (
                             <Link to="/superadmin" className={navLinkClass('/superadmin')}>
                                 Super Admin
                             </Link>
                         )}
-                        {user && user.role === 'admin' && (
+                        {user && user.role?.toLowerCase() === 'admin' && (
                             <Link to="/admin" className={navLinkClass('/admin')}>
-                                Admin
+                                Admin Dashboard
                             </Link>
                         )}
-                        {user && user.role === 'student' && (
+                        {user && user.role?.toLowerCase() === 'student' && (
                             <Link to="/student" className={navLinkClass('/student')}>
-                                My Degrees
+                                Student Dashboard
                             </Link>
                         )}
                         <Link to="/contact" className={navLinkClass('/contact')}>
@@ -163,17 +167,29 @@ const Navigation = ({ walletAddress, onConnectWallet }) => {
                         {user ? (
                             <div className="flex items-center gap-3 ml-4">
                                 {/* Connect Wallet button for students */}
-                                {user.role === 'student' && (
+                                {user.role?.toLowerCase() === 'student' && (
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={onConnectWallet}
-                                        className="border-amber-500 text-amber-400 hover:bg-amber-500/10"
+                                        onClick={walletAddress ? onDisconnectWallet : onConnectWallet}
+                                        onMouseEnter={() => setIsWalletHovered(true)}
+                                        onMouseLeave={() => setIsWalletHovered(false)}
+                                        className={`transition-all duration-300 ${
+                                            walletAddress 
+                                                ? 'border-emerald-500/50 text-emerald-400 hover:border-red-500/50 hover:text-red-400 hover:bg-red-500/10' 
+                                                : 'border-amber-500 text-amber-400 hover:bg-amber-500/10'
+                                        }`}
                                     >
                                         {walletAddress ? (
-                                            <span className="flex items-center gap-2">
-                                                🟢 {formatAddress(walletAddress)}
-                                            </span>
+                                            isWalletHovered ? (
+                                                <span className="flex items-center gap-2">
+                                                    🔌 Disconnect
+                                                </span>
+                                            ) : (
+                                                <span className="flex items-center gap-2">
+                                                    🟢 {formatAddress(walletAddress)}
+                                                </span>
+                                            )
                                         ) : (
                                             <span className="flex items-center gap-2">
                                                 🔗 Connect Wallet
@@ -207,9 +223,20 @@ const Navigation = ({ walletAddress, onConnectWallet }) => {
                                                 <p className="text-amber-400 text-xs mt-1 capitalize font-medium">{user.role}</p>
                                             </div>
                                             {walletAddress && (
-                                                <div className="p-4 border-b border-white/10">
-                                                    <p className="text-white/50 text-xs uppercase tracking-wider mb-1">Wallet</p>
-                                                    <p className="text-white font-mono text-sm">{formatAddress(walletAddress)}</p>
+                                                <div className="p-4 border-b border-white/10 flex items-center justify-between gap-2">
+                                                    <div>
+                                                        <p className="text-white/50 text-xs uppercase tracking-wider mb-1">Wallet</p>
+                                                        <p className="text-white font-mono text-sm" title={walletAddress}>{formatAddress(walletAddress)}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            onDisconnectWallet();
+                                                            setShowUserMenu(false);
+                                                        }}
+                                                        className="px-2 py-1 text-xs font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 hover:text-red-300 rounded-lg border border-red-500/20 transition-all duration-300"
+                                                    >
+                                                        Disconnect
+                                                    </button>
                                                 </div>
                                             )}
                                             <Link
@@ -305,6 +332,61 @@ const Navigation = ({ walletAddress, onConnectWallet }) => {
                                         <p className="text-amber-400 text-xs capitalize">{user.role}</p>
                                     </div>
                                 </div>
+
+                                {/* Dashboard Links for Mobile */}
+                                <div className="space-y-1 mb-4">
+                                    {user.role?.toLowerCase() === 'superadmin' && (
+                                        <Link to="/superadmin" className="block text-white/80 hover:text-white hover:bg-white/5 transition-all duration-200 py-3 px-4 rounded-lg" onClick={() => setIsOpen(false)}>
+                                            Super Admin Dashboard
+                                        </Link>
+                                    )}
+                                    {user.role?.toLowerCase() === 'admin' && (
+                                        <Link to="/admin" className="block text-white/80 hover:text-white hover:bg-white/5 transition-all duration-200 py-3 px-4 rounded-lg" onClick={() => setIsOpen(false)}>
+                                            Admin Dashboard
+                                        </Link>
+                                    )}
+                                    {user.role?.toLowerCase() === 'student' && (
+                                        <Link to="/student" className="block text-white/80 hover:text-white hover:bg-white/5 transition-all duration-200 py-3 px-4 rounded-lg" onClick={() => setIsOpen(false)}>
+                                            Student Dashboard
+                                        </Link>
+                                    )}
+                                    <Link to="/settings" className="block text-white/80 hover:text-white hover:bg-white/5 transition-all duration-200 py-3 px-4 rounded-lg" onClick={() => setIsOpen(false)}>
+                                        Settings
+                                    </Link>
+                                </div>
+
+                                {user.role?.toLowerCase() === 'student' && (
+                                    <div className="px-4 mb-4">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                if (walletAddress) {
+                                                    onDisconnectWallet();
+                                                } else {
+                                                    onConnectWallet();
+                                                }
+                                                setIsOpen(false);
+                                            }}
+                                            className={`w-full justify-center transition-all duration-300 ${
+                                                walletAddress 
+                                                    ? 'border-emerald-500/50 text-emerald-400 hover:border-red-500/50 hover:text-red-400 hover:bg-red-500/10' 
+                                                    : 'border-amber-500 text-amber-400 hover:bg-amber-500/10'
+                                            }`}
+                                        >
+                                            {walletAddress ? (
+                                                <span className="flex items-center gap-2 justify-center">
+                                                    🟢 {formatAddress(walletAddress)} (Disconnect)
+                                                </span>
+                                            ) : (
+                                                <span className="flex items-center gap-2 justify-center">
+                                                    🔗 Connect Wallet
+                                                </span>
+                                            )}
+                                        </Button>
+                                    </div>
+                                )}
+
                                 <Button variant="secondary" size="sm" onClick={handleLogout} className="w-full">
                                     Logout
                                 </Button>

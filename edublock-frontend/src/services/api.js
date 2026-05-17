@@ -42,6 +42,12 @@ export const authAPI = {
 
     getMe: () =>
         api.get('/auth/me'),
+
+    forgotPassword: (email) =>
+        api.post('/auth/forgot-password', { email }),
+
+    resetPassword: (token, new_password) =>
+        api.post('/auth/reset-password', { token, new_password }),
 };
 
 // ==================== DEGREES / CERTIFICATES ====================
@@ -61,6 +67,9 @@ export const degreesAPI = {
     revoke: (id, reason) =>
         api.post(`/degrees/${id}/revoke`, { reason }),
 
+    updateStatus: (id, status) =>
+        api.put(`/degrees/${id}/status`, { status }),
+
     delete: (id) =>
         api.delete(`/degrees/${id}`),
 };
@@ -78,6 +87,9 @@ export const verifyAPI = {
 export const universitiesAPI = {
     list: () =>
         api.get('/universities/'),
+
+    listPublic: () =>
+        api.get('/universities/public'),
 
     create: (data) =>
         api.post('/universities/', data),
@@ -105,12 +117,32 @@ export const usersAPI = {
 
     delete: (id) =>
         api.delete(`/users/${id}`),
+
+    updatePassword: (current_password, new_password) =>
+        api.put('/users/me/password', { current_password, new_password }),
+
+    uploadPhoto: (formData) =>
+        api.post('/users/me/photo', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        }),
+
+    getPreferences: () =>
+        api.get('/users/me/preferences'),
+
+    updatePreferences: (preferences) =>
+        api.put('/users/me/preferences', { preferences }),
 };
 
 // ==================== ANALYTICS ====================
 export const analyticsAPI = {
     getDashboard: () =>
         api.get('/analytics/dashboard'),
+};
+
+// ==================== AUDIT LOGS ====================
+export const auditAPI = {
+    getLogs: (page = 1, limit = 20, action = '') =>
+        api.get('/audit/logs', { params: { page, limit, action: action || undefined } }),
 };
 
 export default api;

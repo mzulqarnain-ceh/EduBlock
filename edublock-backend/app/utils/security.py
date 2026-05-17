@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 import hashlib
 import secrets
+import re
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -74,10 +75,46 @@ def get_current_user(
 def require_role(*roles: str):
     """Dependency factory: Restrict access to specific user roles."""
     def role_checker(current_user: User = Depends(get_current_user)):
-        if current_user.role.value not in roles:
+        user_role = current_user.role.value.lower() if hasattr(current_user.role, 'value') else str(current_user.role).lower()
+        allowed_roles = [r.lower() for r in roles]
+        
+        if user_role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Required role: {', '.join(roles)}"
             )
         return current_user
     return role_checker
+
+
+def is_safe_input(value: Optional[str]) -> bool:
+    """
+    Validate that a given string input is safe from SQL injection, XSS, and command injection.
+    Only allows alphanumeric characters, spaces, and safe symbols: - _ @ . /
+    Returns True if safe, False if potentially malicious.
+    """
+    if not value:
+        return True
+    
+    # 1. Length constraint (defense in depth against buffer overflow or huge inputs)
+    if len(value) > 255:
+        return False
+        
+    # 2. Character white-listing (No quotes, semicolons, angle brackets, etc.)
+    # Allowed: alphanumeric, space, hyphens, underscores, at signs, dots, forward slashes
+    safe_pattern = re.compile(r"^[a-zA-Z0-9\s\-_@./]*$")
+    if not safe_pattern.match(value):
+        return False
+        
+    # 3. SQL injection and Script injection blacklist (case-insensitive check)
+    blacklist = [
+        "select", "union", "insert", "update", "delete", "drop", "alter", 
+        "truncate", "exec", "script", "--", "/*", "*/", "xp_cmdshell"
+    ]
+    lower_val = value.lower()
+    for keyword in blacklist:
+        if keyword in lower_val:
+            return False
+            
+    return True
+
