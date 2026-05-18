@@ -405,12 +405,20 @@ const AdminDashboard = () => {
 
         // Final safety check
         safeMessage = String(safeMessage);
-        if (safeMessage.length > 300) {
-            safeMessage = safeMessage.slice(0, 300) + '...';
+        if (safeMessage.length > 500) {
+            safeMessage = safeMessage.slice(0, 500) + '...';
         }
 
         setNotification({ show: true, type, message: safeMessage });
-        setTimeout(() => setNotification({ show: false, type: '', message: '' }), 3500);
+
+        if (window.adminNotificationTimeout) {
+            clearTimeout(window.adminNotificationTimeout);
+        }
+
+        const duration = type === 'success' ? 4000 : 30000; // 30 seconds for errors so user can read/copy
+        window.adminNotificationTimeout = setTimeout(() => {
+            setNotification({ show: false, type: '', message: '' });
+        }, duration);
     };
 
     // Smooth scroll to top of viewport when page or tab changes
@@ -735,7 +743,10 @@ const AdminDashboard = () => {
 
     const handleFileSelect = (e) => {
         const file = e.target.files[0];
-        handleCSVUpload(file);
+        if (file) {
+            handleCSVUpload(file);
+        }
+        e.target.value = ''; // Reset input to allow selecting the same file again
     };
 
     const handleBulkMint = async () => {
@@ -1827,22 +1838,32 @@ const AdminDashboard = () => {
                 <motion.div
                     initial={{ opacity: 0, y: -50 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="fixed top-24 right-4 z-50"
+                    className="fixed top-24 right-4 z-50 cursor-pointer"
+                    onClick={() => setNotification({ show: false, type: '', message: '' })}
+                    title="Click to close"
                 >
                     <div className={`px-6 py-4 rounded-lg shadow-lg backdrop-blur-lg border ${notification.type === 'success'
                         ? 'bg-green-500/20 border-green-500 text-green-400'
                         : 'bg-red-500/20 border-red-500 text-red-400'
-                        } flex items-center gap-3`}>
+                        } flex items-center gap-3 select-text`}
+                        onClick={(e) => e.stopPropagation()} // Stop propagation so user can select text without closing
+                    >
                         {notification.type === 'success' ? (
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                         ) : (
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         )}
-                        <span className="font-medium">{notification.message}</span>
+                        <span className="font-medium text-sm max-w-md break-words">{notification.message}</span>
+                        <button 
+                            className="ml-2 text-white/60 hover:text-white font-bold text-lg focus:outline-none flex-shrink-0"
+                            onClick={() => setNotification({ show: false, type: '', message: '' })}
+                        >
+                            ×
+                        </button>
                     </div>
                 </motion.div>
             )}
