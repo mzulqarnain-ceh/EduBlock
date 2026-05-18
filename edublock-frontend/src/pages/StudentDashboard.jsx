@@ -63,8 +63,33 @@ const StudentDashboard = () => {
     }, []);
 
     const showNotification = (message) => {
-        setNotification({ show: true, message });
-        setTimeout(() => setNotification({ show: false, message: '' }), 3000);
+        let safeMessage = '';
+        if (typeof message === 'string') {
+            safeMessage = message;
+        } else if (Array.isArray(message)) {
+            if (message.length > 0 && typeof message[0] === 'object' && message[0] !== null) {
+                safeMessage = message.map(err => {
+                    const locStr = err.loc ? err.loc.filter(l => l !== 'body').join('.') : '';
+                    const fieldPrefix = locStr ? `[${locStr}]: ` : '';
+                    return `${fieldPrefix}${err.msg || 'Invalid value'}`;
+                }).join(', ');
+            } else {
+                safeMessage = message.map(item => String(item)).join(', ');
+            }
+        } else if (typeof message === 'object' && message !== null) {
+            safeMessage = message.detail || message.message || message.error || JSON.stringify(message);
+        } else {
+            safeMessage = String(message || '');
+        }
+
+        // Final safety check
+        safeMessage = String(safeMessage);
+        if (safeMessage.length > 300) {
+            safeMessage = safeMessage.slice(0, 300) + '...';
+        }
+
+        setNotification({ show: true, message: safeMessage });
+        setTimeout(() => setNotification({ show: false, message: '' }), 3500);
     };
 
     const handleUpdateProfile = async () => {
