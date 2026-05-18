@@ -87,6 +87,36 @@ def issue_degree(
         "university_id": current_user.university_id,
     }
     blockchain_hash = generate_degree_hash(degree_data)
+
+    # --- Prevent Duplicate Degrees ---
+    # 1. Check if the exact same degree hash has been issued already
+    existing_by_hash = db.query(Degree).filter(Degree.blockchain_hash == blockchain_hash).first()
+    if existing_by_hash:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Degree already issued against this record."
+        )
+
+    # 2. Check for an active (non-revoked) certificate by student Name, Registration No, and Degree Name
+    dup_filters = [
+        func.lower(func.trim(Degree.student_name)) == request.student_name.lower().strip(),
+        func.lower(func.trim(Degree.degree_name)) == request.degree_name.lower().strip(),
+        Degree.university_id == current_user.university_id,
+        Degree.status != DegreeStatus.REVOKED
+    ]
+    if request.registration_no:
+        dup_filters.append(func.lower(func.trim(Degree.registration_no)) == request.registration_no.lower().strip())
+    else:
+        dup_filters.append(func.lower(func.trim(Degree.student_id)) == request.student_id.lower().strip())
+    
+    existing_degree = db.query(Degree).filter(*dup_filters).first()
+    
+    if existing_degree:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Degree already issued against this record."
+        )
+
     token_id = get_next_token_id(db)
 
     # Create degree record
@@ -191,6 +221,7 @@ def bulk_issue_degrees(
 
     results = []
     errors = []
+    duplicate_count = 0
 
     for idx, deg_data in enumerate(request.degrees):
         try:
@@ -206,6 +237,32 @@ def bulk_issue_degrees(
                 "university_id": current_user.university_id,
             }
             blockchain_hash = generate_degree_hash(degree_dict)
+
+            # --- Prevent Duplicate Degrees ---
+            # 1. Check if the exact same degree hash has been issued already
+            existing_by_hash = db.query(Degree).filter(Degree.blockchain_hash == blockchain_hash).first()
+            if existing_by_hash:
+                duplicate_count += 1
+                raise ValueError("Degree already issued against this record.")
+
+            # 2. Check for an active (non-revoked) certificate by student Name, Registration No, and Degree Name
+            dup_filters = [
+                func.lower(func.trim(Degree.student_name)) == deg_data.student_name.lower().strip(),
+                func.lower(func.trim(Degree.degree_name)) == deg_data.degree_name.lower().strip(),
+                Degree.university_id == current_user.university_id,
+                Degree.status != DegreeStatus.REVOKED
+            ]
+            if deg_data.registration_no:
+                dup_filters.append(func.lower(func.trim(Degree.registration_no)) == deg_data.registration_no.lower().strip())
+            else:
+                dup_filters.append(func.lower(func.trim(Degree.student_id)) == deg_data.student_id.lower().strip())
+            
+            existing_degree = db.query(Degree).filter(*dup_filters).first()
+            
+            if existing_degree:
+                duplicate_count += 1
+                raise ValueError("Degree already issued against this record.")
+
             token_id = get_next_token_id(db)
 
             degree = Degree(
@@ -262,17 +319,35 @@ def bulk_issue_degrees(
         except Exception as e:
             errors.append(f"Row {idx + 1} ({deg_data.student_name}): {str(e)}")
 
+    if len(results) == 0:
+        # All records were duplicates or failed
+        if duplicate_count == len(request.degrees):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="All uploaded degrees are duplicates of already issued records."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to issue degrees. Errors: {'; '.join(errors)}"
+            )
+
     # Audit log for bulk issue
     create_audit_log(
         db=db,
         action=AuditAction.BULK_ISSUE,
         user=current_user,
         target_type="degree",
-        details=f"Bulk issued {len(results)} certificates. {len(errors)} errors.",
+        details=f"Bulk issued {len(results)} certificates. {duplicate_count} duplicates skipped. {len(errors) - duplicate_count} errors.",
     )
 
     db.commit()
-    response = {"message": f"{len(results)} degrees issued successfully", "count": len(results)}
+
+    msg = f"{len(results)} degrees issued successfully."
+    if duplicate_count > 0:
+        msg += f" {duplicate_count} duplicate certificates were skipped."
+
+    response = {"message": msg, "count": len(results)}
     if errors:
         response["errors"] = errors
     return response
