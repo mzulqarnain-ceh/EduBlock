@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import Button from '../components/Button';
 import Card from '../components/Card';
+import { usersAPI } from '../services/api';
 
 const ContactUs = () => {
     const [formData, setFormData] = useState({
@@ -86,22 +87,31 @@ const ContactUs = () => {
 
         setLoading(true);
 
-        // Simulate form submission
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        try {
+            await usersAPI.submitContact({
+                name: trimmedName,
+                email: trimmedEmail,
+                subject: trimmedSubject,
+                message: trimmedMessage
+            });
 
-        setSubmitted(true);
-        setLoading(false);
+            setSubmitted(true);
+            
+            // Reset form
+            setFormData({
+                name: '',
+                email: '',
+                subject: '',
+                message: '',
+            });
 
-        // Reset form
-        setFormData({
-            name: '',
-            email: '',
-            subject: '',
-            message: '',
-        });
-
-        // Reset success message after 5 seconds
-        setTimeout(() => setSubmitted(false), 5000);
+            // Reset success message after 5 seconds
+            setTimeout(() => setSubmitted(false), 5000);
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Failed to send message. Please try again later.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const contactInfo = [
@@ -112,7 +122,7 @@ const ContactUs = () => {
                 </svg>
             ),
             title: 'Email',
-            content: 'support@edublock.com',
+            content: 'edublocksupport@gmail.com',
         },
         {
             icon: (

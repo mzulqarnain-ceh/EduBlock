@@ -11,6 +11,7 @@ class DegreeIssue(BaseModel):
     degree_name: str
     grade: Optional[str] = None
     issue_date: str
+    duration_years: int = 4
 
     @staticmethod
     def _scan_injections(val: str, field_name: str):
@@ -154,6 +155,7 @@ class DegreeClaimRequest(BaseModel):
 class DegreeApproveRequest(BaseModel):
     grade: str
     issue_date: str
+    duration_years: int = 4
 
 
 class DegreeResponse(BaseModel):
@@ -162,6 +164,7 @@ class DegreeResponse(BaseModel):
     student_id: str
     registration_no: Optional[str] = None
     student_email: Optional[str] = None
+    duration_years: int = 4
     degree_name: str
     grade: Optional[str] = None
     issue_date: str

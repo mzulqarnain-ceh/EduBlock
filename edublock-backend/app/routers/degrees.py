@@ -54,47 +54,55 @@ def _lookup_student_user(db: Session, registration_no: str, email: str = None) -
     return None
 
 
-def is_major_degree(degree_name: str) -> bool:
-    """Check if degree is a major 4-year degree (BS, Bachelor, etc.)"""
-    name = degree_name.lower()
-    # Exempt short degrees/diplomas
-    if any(x in name for x in ["b.ed", "bed", "diploma", "certificate", "associate"]):
-        return False
-    # Identify major degrees
-    if any(name.startswith(x) for x in ["bs", "b.sc", "bachelor", "bba", "bfa", "be "]):
-        return True
-    return False
-
-def check_overlapping_major_degrees(db: Session, student_name: str, registration_no: str, new_degree_name: str, new_issue_date: str):
-    """Prevent issuing multiple major degrees within a 4-year overlapping period to the same student."""
-    if not is_major_degree(new_degree_name):
-        return # Not a major degree, allowed
-        
-    try:
-        new_date = datetime.strptime(new_issue_date, "%Y-%m-%d")
-    except ValueError:
-        return
-        
-    # Find other degrees for this student
+def check_overlapping_degrees(db: Session, student_name: str, registration_no: str, new_issue_date_str: str, new_duration_years: int):
+    """
+    1. Enforce unique student name matching for the same registration number.
+    2. Prevent overlapping study intervals for the same registration number.
+    """
+    from datetime import timedelta
+    reg_no_clean = registration_no.lower().strip()
+    
+    # Get all active (non-revoked) degrees for this registration number
     existing_degrees = db.query(Degree).filter(
-        func.lower(func.trim(Degree.student_name)) == student_name.lower().strip(),
-        func.lower(func.trim(Degree.registration_no)) == registration_no.lower().strip(),
+        func.lower(func.trim(Degree.registration_no)) == reg_no_clean,
         Degree.status != DegreeStatus.REVOKED
     ).all()
     
+    if not existing_degrees:
+        return
+        
+    # Rule 1: Enforce same student name check (Identity protection)
+    first_existing = existing_degrees[0]
+    if first_existing.student_name.lower().strip() != student_name.lower().strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Registration number '{registration_no}' belongs to student '{first_existing.student_name}'. Cannot issue to '{student_name}'."
+        )
+        
+    # Rule 2: Overlapping study duration check
+    try:
+        new_end = datetime.strptime(new_issue_date_str.strip(), "%Y-%m-%d")
+        new_start = new_end - timedelta(days=float(new_duration_years) * 365.25)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid issue date format. Must be YYYY-MM-DD."
+        )
+        
     for existing in existing_degrees:
-        if is_major_degree(existing.degree_name):
-            try:
-                exist_date = datetime.strptime(existing.issue_date, "%Y-%m-%d")
-                # Calculate difference in years
-                diff_years = abs((new_date - exist_date).days) / 365.25
-                if diff_years < 4:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Student is already enrolled in a major 4-year degree ({existing.degree_name}) during this period. Overlapping major degrees are not allowed."
-                    )
-            except ValueError:
-                continue
+        try:
+            exist_end = datetime.strptime(existing.issue_date.strip(), "%Y-%m-%d")
+            exist_duration = getattr(existing, 'duration_years', 4) or 4
+            exist_start = exist_end - timedelta(days=float(exist_duration) * 365.25)
+            
+            # Strict Inequality Overlap Formula: A < D and C < B
+            if new_start < exist_end and exist_start < new_end:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Student is already enrolled in another active degree ({existing.degree_name}) during this period ({existing.issue_date} with {exist_duration}-year duration). Overlapping degrees are not allowed."
+                )
+        except ValueError:
+            continue
 
 
 @router.post("/issue", response_model=DegreeResponse)
@@ -121,8 +129,8 @@ def issue_degree(
     student_user = _lookup_student_user(db, request.registration_no, request.student_email)
     student_user_id = student_user.id if student_user else None
 
-    # Overlapping major degree check
-    check_overlapping_major_degrees(db, request.student_name, request.registration_no, request.degree_name, request.issue_date)
+    # Overlapping degree check
+    check_overlapping_degrees(db, request.student_name, request.registration_no, request.issue_date, request.duration_years)
 
     # Generate blockchain hash from degree data
     degree_data = {
@@ -170,6 +178,7 @@ def issue_degree(
         student_id=request.registration_no,
         registration_no=request.registration_no,
         student_email=request.student_email,
+        duration_years=request.duration_years,
         degree_name=request.degree_name,
         grade=request.grade,
         issue_date=request.issue_date,
@@ -574,8 +583,8 @@ def approve_pending_degree(
     if not request.issue_date or not request.issue_date.strip():
         raise HTTPException(status_code=400, detail="Issue date is required for approval")
 
-    # Overlapping major degree check
-    check_overlapping_major_degrees(db, degree.student_name, degree.registration_no, degree.degree_name, request.issue_date)
+    # Overlapping degree check
+    check_overlapping_degrees(db, degree.student_name, degree.registration_no, request.issue_date, request.duration_years)
 
     # Generate blockchain hash from degree data
     degree_data = {
@@ -598,6 +607,7 @@ def approve_pending_degree(
     token_id = get_next_token_id(db)
     degree.grade = request.grade
     degree.issue_date = request.issue_date
+    degree.duration_years = request.duration_years
     degree.blockchain_hash = blockchain_hash
     degree.token_id = token_id
     degree.status = DegreeStatus.ISSUED

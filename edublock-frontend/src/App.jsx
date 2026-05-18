@@ -17,6 +17,7 @@ import ResetPassword from './pages/ResetPassword';
 import NotFound from './pages/NotFound';
 import { ToastProvider } from './context/ToastContext';
 import Toast from './components/Toast';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   const [walletAddress, setWalletAddress] = useState('');
@@ -102,10 +103,26 @@ function App() {
               <Route path="/verify" element={<Verification />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
-              <Route path="/admin" element={<AdminDashboard />} />
-              <Route path="/student" element={<StudentDashboard />} />
-              <Route path="/superadmin" element={<SuperAdminDashboard />} />
-              <Route path="/settings" element={<Settings />} />
+              <Route path="/admin" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/student" element={
+                <ProtectedRoute allowedRoles={['student']}>
+                  <StudentDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/superadmin" element={
+                <ProtectedRoute allowedRoles={['superadmin']}>
+                  <SuperAdminDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/settings" element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              } />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/contact" element={<ContactUs />} />
               <Route path="*" element={<NotFound />} />

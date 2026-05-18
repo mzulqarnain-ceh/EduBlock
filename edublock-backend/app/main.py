@@ -80,6 +80,14 @@ def startup():
         except Exception:
             db.rollback()
 
+        # Add duration_years column to degrees table if it doesn't exist
+        try:
+            db.execute(text("ALTER TABLE degrees ADD COLUMN duration_years INTEGER DEFAULT 4"))
+            db.commit()
+            print("✅ Migration: Added 'duration_years' column to degrees table")
+        except Exception:
+            db.rollback()
+
     except Exception as e:
         print(f"⚠️  Migration check: {e}")
         db.rollback()

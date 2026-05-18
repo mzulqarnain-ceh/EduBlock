@@ -238,3 +238,30 @@ def trigger_test_email(
         raise HTTPException(status_code=500, detail="Failed to send test email. Please check SMTP / Resend API settings.")
         
     return {"message": "Test email sent successfully!"}
+
+
+from pydantic import BaseModel
+
+class ContactSubmission(BaseModel):
+    name: str
+    email: str
+    subject: str
+    message: str
+
+@router.post("/contact")
+def submit_contact_form(request: ContactSubmission):
+    """Submit the public Contact Us form."""
+    from app.services.email_service import send_contact_form_email
+    
+    success = send_contact_form_email(
+        sender_name=request.name.strip(),
+        sender_email=request.email.strip(),
+        email_subject=request.subject.strip(),
+        message_body=request.message.strip()
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to deliver contact message. Please try again later.")
+        
+    return {"message": "Your message has been delivered successfully!"}
+

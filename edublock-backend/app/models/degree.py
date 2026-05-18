@@ -19,6 +19,7 @@ class Degree(Base):
     student_id = Column(String(100), nullable=False, index=True) # Retaining for backward compatibility (maps to registration_no)
     registration_no = Column(String(100), nullable=True)
     student_email = Column(String(255), nullable=True)
+    duration_years = Column(Integer, nullable=False, default=4)
     degree_name = Column(String(255), nullable=False)
     grade = Column(String(50), nullable=True)
     issue_date = Column(String(50), nullable=False)

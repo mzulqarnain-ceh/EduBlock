@@ -254,3 +254,45 @@ def send_test_email(to_email: str, name: str):
     </div>
     """
     return _send_email(to_email, subject, html)
+
+
+def send_contact_form_email(sender_name: str, sender_email: str, email_subject: str, message_body: str):
+    """Send an email to support containing the user's contact form message."""
+    settings = get_settings()
+    # Support email to deliver the message to
+    support_email = "edublocksupport@gmail.com"
+    
+    subject = f"📨 New Support Message: {email_subject}"
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0f172a; color: #e2e8f0; padding: 30px; border-radius: 12px;">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #fbbf24; margin: 0;">🎓 EduBlock Support</h1>
+            <p style="color: #94a3b8;">New Contact Us Submission</p>
+        </div>
+        <div style="background: #1e293b; padding: 24px; border-radius: 8px; border: 1px solid #334155;">
+            <h2 style="color: #3b82f6; margin-top: 0;">Message Details</h2>
+            <table style="width: 100%; margin: 16px 0; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 8px 0; color: #94a3b8; width: 100px;">From Name:</td>
+                    <td style="padding: 8px 0; font-weight: bold;">{sender_name}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px 0; color: #94a3b8;">From Email:</td>
+                    <td style="padding: 8px 0; font-weight: bold; color: #60a5fa;">{sender_email}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px 0; color: #94a3b8;">Subject:</td>
+                    <td style="padding: 8px 0; font-weight: bold;">{email_subject}</td>
+                </tr>
+            </table>
+            <hr style="border: 0; border-top: 1px solid #334155; margin: 20px 0;">
+            <h3 style="color: #e2e8f0; margin-top: 0;">Message Content:</h3>
+            <p style="background: #0f172a; padding: 16px; border-radius: 8px; font-family: monospace; white-space: pre-wrap; margin: 0; line-height: 1.5;">{message_body}</p>
+        </div>
+        <p style="text-align: center; color: #64748b; font-size: 12px; margin-top: 24px;">
+            © EduBlock Contact Form Service
+        </p>
+    </div>
+    """
+    return _send_email(support_email, subject, html)
+

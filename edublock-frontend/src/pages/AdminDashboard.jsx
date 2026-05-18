@@ -297,6 +297,7 @@ const AdminDashboard = () => {
         degreeName: '',
         universityName: adminUniversityName,
         grade: '',
+        durationYears: '4',
         issueDate: '',
         certificateHash: '',
     });
@@ -490,7 +491,7 @@ const AdminDashboard = () => {
 
     const handleApproveClick = (claim) => {
         setSelectedPendingClaim(claim);
-        setApproveData({ grade: '', issueDate: getTodayDateString() });
+        setApproveData({ grade: '', issueDate: getTodayDateString(), durationYears: '4' });
         setApproveErrors({});
         setShowApproveModal(true);
     };
@@ -515,6 +516,7 @@ const AdminDashboard = () => {
             const response = await degreesAPI.approve(selectedPendingClaim.id, {
                 grade: approveData.grade.trim(),
                 issue_date: approveData.issueDate,
+                duration_years: parseInt(approveData.durationYears || '4', 10),
             });
 
             const updatedCert = response.data;
@@ -777,7 +779,7 @@ const AdminDashboard = () => {
         setLoading(true);
 
         try {
-            // Call backend API to issue certificate
+             // Call backend API to issue certificate
             const response = await degreesAPI.issue({
                 student_name: formData.studentName.trim(),
                 registration_no: formData.registrationNumber.trim(),
@@ -785,6 +787,7 @@ const AdminDashboard = () => {
                 degree_name: formData.degreeName.trim(),
                 grade: formData.grade.trim(),
                 issue_date: formData.issueDate,
+                duration_years: parseInt(formData.durationYears || '4', 10),
             });
 
             const cert = response.data;
@@ -811,6 +814,7 @@ const AdminDashboard = () => {
                 degreeName: '',
                 universityName: adminUniversityName,
                 grade: '',
+                durationYears: '4',
                 issueDate: '',
                 certificateHash: cert.blockchain_hash || '',
             });
@@ -1228,7 +1232,7 @@ const AdminDashboard = () => {
                                             <p className="text-xs text-white/40 mt-1">Auto-filled from your admin profile</p>
                                         </div>
 
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <div>
                                                 <label htmlFor="grade" className="block text-sm font-medium mb-2 text-white/70">
                                                     Grade / CGPA
@@ -1256,6 +1260,25 @@ const AdminDashboard = () => {
                                                         ⚠️ {errors.grade}
                                                     </motion.p>
                                                 )}
+                                            </div>
+                                            <div>
+                                                <label htmlFor="durationYears" className="block text-sm font-medium mb-2 text-white/70">
+                                                    Degree Duration
+                                                </label>
+                                                <div className="relative">
+                                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">⏳</span>
+                                                    <select
+                                                        id="durationYears"
+                                                        name="durationYears"
+                                                        value={formData.durationYears}
+                                                        onChange={handleInputChange}
+                                                        className="input-field w-full pl-12 bg-white/5 text-white pr-8 cursor-pointer"
+                                                        required
+                                                    >
+                                                        <option value="4" className="bg-slate-900 text-white">4 Years (e.g., BS, BE)</option>
+                                                        <option value="2" className="bg-slate-900 text-white">2 Years (e.g., B.Ed, M.Sc, Associate)</option>
+                                                    </select>
+                                                </div>
                                             </div>
                                             <div>
                                                 <label htmlFor="issueDate" className="block text-sm font-medium mb-2 text-white/70">
@@ -2209,6 +2232,22 @@ const AdminDashboard = () => {
                                     {approveErrors.grade && (
                                         <p className="text-red-400 text-xs mt-1">⚠️ {approveErrors.grade}</p>
                                     )}
+                                </div>
+
+                                <div>
+                                    <label htmlFor="approveDurationYears" className="block text-sm font-medium mb-2 text-white/70">
+                                        Degree Duration *
+                                    </label>
+                                    <select
+                                        id="approveDurationYears"
+                                        value={approveData.durationYears}
+                                        onChange={(e) => setApproveData({ ...approveData, durationYears: e.target.value })}
+                                        className="input-field w-full cursor-pointer bg-slate-900 text-white"
+                                        required
+                                    >
+                                        <option value="4">4 Years (e.g., BS, BE)</option>
+                                        <option value="2">2 Years (e.g., B.Ed, M.Sc, Associate)</option>
+                                    </select>
                                 </div>
 
                                 <div>

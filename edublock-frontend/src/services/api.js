@@ -148,6 +148,9 @@ export const usersAPI = {
 
     testEmail: () =>
         api.post('/users/me/test-email'),
+
+    submitContact: (data) =>
+        api.post('/users/contact', data),
 };
 
 // ==================== ANALYTICS ====================
