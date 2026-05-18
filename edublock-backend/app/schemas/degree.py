@@ -186,3 +186,7 @@ class VerifyResponse(BaseModel):
     status: str
     message: str
     degree: Optional[DegreeResponse] = None
+
+
+class DegreeBulkDelete(BaseModel):
+    degree_ids: List[int]

@@ -10,7 +10,7 @@ from app.models.degree import Degree, DegreeStatus
 from app.models.transaction import Transaction, TransactionType, TransactionStatus
 from app.models.university import University, UniversityStatus # Add this
 from app.models.audit_log import AuditAction
-from app.schemas.degree import DegreeIssue, DegreeBulkIssue, DegreeResponse, DegreeRevoke, DegreeStatusUpdate, VerifyRequest, VerifyResponse
+from app.schemas.degree import DegreeIssue, DegreeBulkIssue, DegreeResponse, DegreeRevoke, DegreeStatusUpdate, VerifyRequest, VerifyResponse, DegreeBulkDelete
 from app.utils.security import get_current_user, require_role
 from app.services.blockchain_service import blockchain
 from app.routers.audit import create_audit_log
@@ -558,3 +558,51 @@ def delete_degree(
     db.commit()
 
     return {"message": f"Degree for '{student_name}' has been permanently deleted"}
+
+
+@router.post("/bulk-delete")
+def bulk_delete_degrees(
+    request: DegreeBulkDelete,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "superadmin")),
+):
+    """Permanently delete multiple degrees in bulk. Admin/SuperAdmin only."""
+    if not request.degree_ids:
+        raise HTTPException(status_code=400, detail="No degree IDs provided for deletion")
+
+    # Fetch degrees that match the IDs and belong to the admin's university (if not superadmin)
+    query = db.query(Degree).filter(Degree.id.in_(request.degree_ids))
+    if current_user.role != UserRole.SUPERADMIN:
+        query = query.filter(Degree.university_id == current_user.university_id)
+
+    degrees_to_delete = query.all()
+    if not degrees_to_delete:
+        raise HTTPException(status_code=404, detail="No matching degrees found for deletion")
+
+    deleted_names = []
+    deleted_ids = [d.id for d in degrees_to_delete]
+
+    # Delete associated transactions
+    db.query(Transaction).filter(Transaction.degree_id.in_(deleted_ids)).delete(synchronize_session=False)
+
+    for degree in degrees_to_delete:
+        deleted_names.append(degree.student_name)
+        # Create audit log for each deletion
+        create_audit_log(
+            db=db,
+            action=AuditAction.CERTIFICATE_DELETED,
+            user=current_user,
+            target_type="degree",
+            target_id=degree.id,
+            target_name=f"{degree.student_name} - {degree.degree_name}",
+            details=f"Permanently deleted certificate for {degree.student_name} via bulk delete",
+        )
+        db.delete(degree)
+
+    db.commit()
+
+    return {
+        "message": f"Successfully deleted {len(deleted_ids)} certificates.",
+        "deleted_count": len(deleted_ids),
+        "deleted_names": deleted_names
+    }

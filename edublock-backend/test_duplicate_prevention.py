@@ -8,8 +8,8 @@ sys.path.append(os.getcwd())
 from app.database import SessionLocal
 from app.models.degree import Degree
 from app.models.user import User, UserRole
-from app.schemas.degree import DegreeIssue, DegreeBulkIssue
-from app.routers.degrees import issue_degree, bulk_issue_degrees
+from app.schemas.degree import DegreeIssue, DegreeBulkIssue, DegreeBulkDelete
+from app.routers.degrees import issue_degree, bulk_issue_degrees, bulk_delete_degrees
 
 from app.models.transaction import Transaction
 
@@ -91,20 +91,27 @@ def run_test():
         
         print("✅ SUCCESS: Bulk duplicates successfully identified and skipped while unique ones succeeded!")
         
-        # Cleanup test records from DB to keep it pristine
-        print("\nCleaning up test records from database...")
+        # Testing Bulk Deletion via Endpoint
+        print("\n--- Testing Bulk Deletion ---")
         matching_degrees = db.query(Degree).filter(
             (Degree.student_id == test_student_id) | (Degree.student_id == new_student_id)
         ).all()
         degree_ids = [d.id for d in matching_degrees]
         
         if degree_ids:
-            # Delete transactions first
-            db.query(Transaction).filter(Transaction.degree_id.in_(degree_ids)).delete(synchronize_session=False)
-            # Delete degrees
-            db.query(Degree).filter(Degree.id.in_(degree_ids)).delete(synchronize_session=False)
-            db.commit()
-        print("Cleanup completed.")
+            print(f"Calling bulk_delete_degrees for IDs: {degree_ids}...")
+            delete_req = DegreeBulkDelete(degree_ids=degree_ids)
+            del_res = bulk_delete_degrees(request=delete_req, db=db, current_user=admin)
+            print(f"Bulk Delete response: {del_res}")
+            
+            assert del_res["deleted_count"] == len(degree_ids), "Should delete all matching degree IDs"
+            
+            # Verify they are gone
+            check_degrees = db.query(Degree).filter(Degree.id.in_(degree_ids)).all()
+            assert len(check_degrees) == 0, "All degrees should be permanently deleted from DB"
+            print("✅ SUCCESS: Bulk deletion endpoint works perfectly!")
+        else:
+            print("❌ ERROR: No matching test degrees found to test bulk delete.")
         
     except Exception as e:
         print(f"❌ TEST ERROR: {e}")

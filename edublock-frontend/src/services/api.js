@@ -74,6 +74,9 @@ export const degreesAPI = {
 
     delete: (id) =>
         api.delete(`/degrees/${id}`),
+
+    bulkDelete: (degreeIds) =>
+        api.post('/degrees/bulk-delete', { degree_ids: degreeIds }),
 };
 
 // ==================== VERIFICATION ====================

@@ -301,6 +301,8 @@ const AdminDashboard = () => {
     const [revokeReason, setRevokeReason] = useState('');
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [certToDelete, setCertToDelete] = useState(null);
+    const [selectedCertIds, setSelectedCertIds] = useState([]);
+    const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
     // Bulk Upload State
     const [csvData, setCsvData] = useState([]);
@@ -513,6 +515,7 @@ const AdminDashboard = () => {
         try {
             await degreesAPI.delete(certToDelete.id);
             setIssuedCertificates(prev => prev.filter(c => c.id !== certToDelete.id));
+            setSelectedCertIds(prev => prev.filter(id => id !== certToDelete.id)); // also clear from selected
             showNotification('success', `Certificate for ${certToDelete.studentName} has been deleted.`);
         } catch (err) {
             showNotification('error', err.response?.data?.detail || 'Failed to delete certificate.');
@@ -520,6 +523,51 @@ const AdminDashboard = () => {
         setShowDeleteModal(false);
         setCertToDelete(null);
     };
+
+    // Confirm bulk deletion
+    const confirmBulkDelete = async () => {
+        if (selectedCertIds.length === 0) return;
+        
+        try {
+            const count = selectedCertIds.length;
+            await degreesAPI.bulkDelete(selectedCertIds);
+            setIssuedCertificates(prev => prev.filter(c => !selectedCertIds.includes(c.id)));
+            showNotification('success', `Successfully deleted ${count} certificates.`);
+            setSelectedCertIds([]);
+        } catch (err) {
+            showNotification('error', err.response?.data?.detail || 'Failed to bulk delete certificates.');
+        }
+        setShowBulkDeleteModal(false);
+    };
+
+    // Keyboard shortcuts for delete confirmation modals
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (showDeleteModal) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    confirmDelete();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setShowDeleteModal(false);
+                    setCertToDelete(null);
+                }
+            } else if (showBulkDeleteModal) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    confirmBulkDelete();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setShowBulkDeleteModal(false);
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [showDeleteModal, showBulkDeleteModal, certToDelete, selectedCertIds]);
 
     // Chart data dynamically calculated
     const monthlyData = useMemo(() => {
@@ -1245,7 +1293,26 @@ const AdminDashboard = () => {
                     {activeTab === 'certificates' && (
                         <Card>
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                                <h2 className="text-2xl font-bold">Issued Certificates</h2>
+                                <div className="flex items-center gap-4 flex-wrap">
+                                    <h2 className="text-2xl font-bold">Issued Certificates</h2>
+                                    {selectedCertIds.length > 0 && (
+                                        <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 px-3 py-1 rounded-full text-xs font-semibold text-red-400">
+                                            <span>{selectedCertIds.length} Selected</span>
+                                            <button
+                                                onClick={() => setShowBulkDeleteModal(true)}
+                                                className="bg-red-500 text-white px-2 py-0.5 rounded hover:bg-red-600 transition-colors ml-2 flex items-center gap-1 font-bold cursor-pointer"
+                                            >
+                                                🗑️ Bulk Delete
+                                            </button>
+                                            <button
+                                                onClick={() => setSelectedCertIds([])}
+                                                className="text-white/40 hover:text-white/80 ml-1 transition-colors cursor-pointer"
+                                            >
+                                                Clear
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                                 <div className="flex flex-col sm:flex-row gap-3">
                                     <input
                                         type="text"
@@ -1267,10 +1334,26 @@ const AdminDashboard = () => {
                                 </div>
                             </div>
 
-                            <div className="overflow-x-auto">
+                            <div className="overflow-x-auto overflow-y-visible">
                                 <table className="w-full">
                                     <thead>
                                         <tr className="border-b border-white/10">
+                                            <th className="py-3 px-4 text-center w-12">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={paginatedCertificates.length > 0 && paginatedCertificates.every(cert => selectedCertIds.includes(cert.id))}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            const idsOnPage = paginatedCertificates.map(c => c.id);
+                                                            setSelectedCertIds(prev => [...new Set([...prev, ...idsOnPage])]);
+                                                        } else {
+                                                            const idsOnPage = paginatedCertificates.map(c => c.id);
+                                                            setSelectedCertIds(prev => prev.filter(id => !idsOnPage.includes(id)));
+                                                        }
+                                                    }}
+                                                    className="w-4 h-4 rounded border-white/20 bg-white/10 text-violet-600 focus:ring-violet-500 focus:ring-offset-black cursor-pointer"
+                                                />
+                                            </th>
                                             <th className="text-left py-3 px-4 text-white/80">Student</th>
                                             <th className="text-left py-3 px-4 text-white/80">Degree</th>
                                             <th className="text-left py-3 px-4 text-white/80">Issue Date</th>
@@ -1281,7 +1364,21 @@ const AdminDashboard = () => {
                                     </thead>
                                     <tbody>
                                         {paginatedCertificates.map((cert) => (
-                                            <tr key={cert.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                                            <tr key={cert.id} className={`border-b border-white/5 hover:bg-white/5 transition-colors ${selectedCertIds.includes(cert.id) ? 'bg-violet-500/5' : ''}`}>
+                                                <td className="py-4 px-4 text-center w-12">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedCertIds.includes(cert.id)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setSelectedCertIds(prev => [...prev, cert.id]);
+                                                            } else {
+                                                                setSelectedCertIds(prev => prev.filter(id => id !== cert.id));
+                                                            }
+                                                        }}
+                                                        className="w-4 h-4 rounded border-white/20 bg-white/10 text-violet-600 focus:ring-violet-500 focus:ring-offset-black cursor-pointer"
+                                                    />
+                                                </td>
                                                 <td className="py-4 px-4">
                                                     <p className="font-semibold">{cert.studentName}</p>
                                                     <p className="text-white/50 text-xs">{cert.studentId}</p>
@@ -1780,6 +1877,58 @@ const AdminDashboard = () => {
                                     onClick={confirmDelete}
                                 >
                                     Delete Permanently
+                                </Button>
+                            </div>
+                        </Card>
+                    </motion.div>
+                </div>
+            )}
+
+            {/* Bulk Delete Confirmation Modal */}
+            {showBulkDeleteModal && selectedCertIds.length > 0 && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="max-w-md w-full"
+                    >
+                        <Card>
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold text-red-400">Confirm Bulk Deletion</h2>
+                                <button
+                                    onClick={() => setShowBulkDeleteModal(false)}
+                                    className="text-white/60 hover:text-white"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-center space-y-3">
+                                <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto text-2xl">
+                                    🚨
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-lg text-white">Delete {selectedCertIds.length} Certificates?</p>
+                                    <p className="text-sm text-red-400 mt-1">This action will permanently delete all selected certificates and their transactions from the database. This cannot be undone.</p>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <Button
+                                    variant="secondary"
+                                    className="flex-1"
+                                    onClick={() => setShowBulkDeleteModal(false)}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    className="flex-1 bg-red-500 hover:bg-red-600"
+                                    onClick={confirmBulkDelete}
+                                >
+                                    Delete All ({selectedCertIds.length})
                                 </Button>
                             </div>
                         </Card>
