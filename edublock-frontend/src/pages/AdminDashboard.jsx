@@ -753,6 +753,34 @@ const AdminDashboard = () => {
         setBulkUploading(true);
         setBulkProgress(10);
 
+        // Smart Date Parser helper to automatically convert DD/MM/YYYY, DD-MM-YYYY, YYYY/MM/DD to YYYY-MM-DD
+        const parseCSVDate = (rawDate) => {
+            if (!rawDate) return new Date().toISOString().split('T')[0];
+            const cleaned = String(rawDate).trim();
+            
+            // Match DD/MM/YYYY or DD-MM-YYYY
+            const dmyRegex = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/;
+            const dmyMatch = cleaned.match(dmyRegex);
+            if (dmyMatch) {
+                const day = dmyMatch[1].padStart(2, '0');
+                const month = dmyMatch[2].padStart(2, '0');
+                const year = dmyMatch[3];
+                return `${year}-${month}-${day}`;
+            }
+            
+            // Match YYYY/MM/DD
+            const ymdRegex = /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/;
+            const ymdMatch = cleaned.match(ymdRegex);
+            if (ymdMatch) {
+                const year = ymdMatch[1];
+                const month = ymdMatch[2].padStart(2, '0');
+                const day = ymdMatch[3].padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+            
+            return cleaned;
+        };
+
         try {
             // Map CSV data to backend format
             const degrees = csvData.map(row => ({
@@ -761,7 +789,7 @@ const AdminDashboard = () => {
                 student_id: row['Registration No'] || row['registrationNo'] || 'BULK-' + Date.now(), // Fallback to reg no for legacy student_id field
                 degree_name: row['Degree Name'] || row['degreeName'] || 'Unknown',
                 grade: row['Grade'] || row['grade'] || '',
-                issue_date: row['Issue Date'] || row['issueDate'] || new Date().toISOString().split('T')[0],
+                issue_date: parseCSVDate(row['Issue Date'] || row['issueDate']),
             }));
 
             // Validate bulk uploaded data
