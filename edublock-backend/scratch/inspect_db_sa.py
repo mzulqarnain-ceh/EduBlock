@@ -1,25 +1,22 @@
-
-from sqlalchemy import create_engine, text
-import sys
 import os
+import sys
 
-sys.path.append(os.getcwd())
-from app.config import get_settings
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-def check_data():
-    settings = get_settings()
-    engine = create_engine(settings.DATABASE_URL)
-    
-    with engine.connect() as conn:
-        print("--- USERS ---")
-        res = conn.execute(text("SELECT id, email, registration_no, name, role FROM users"))
-        for row in res:
-            print(f"ID: {row[0]}, Email: {row[1]}, RegNo: {row[2]}, Name: {row[3]}, Role: {row[4]}")
-            
-        print("\n--- DEGREES ---")
-        res = conn.execute(text("SELECT id, student_name, student_id, registration_no, student_user_id, status FROM degrees"))
-        for row in res:
-            print(f"ID: {row[0]}, StudentName: {row[1]}, StudentID (Email): {row[2]}, RegNo: {row[3]}, StudentUserID: {row[4]}, Status: {row[5]}")
+from app.database import SessionLocal
+from app.models.user import User
+from app.models.university import University
 
-if __name__ == "__main__":
-    check_data()
+db = SessionLocal()
+try:
+    print("=== UNIVERSITIES ===")
+    unis = db.query(University).all()
+    for u in unis:
+        print(f"ID: {u.id}, Name: {u.name}, Email: {u.email}, Status: {u.status}")
+        
+    print("\n=== USERS WITH martysyda ===")
+    users = db.query(User).filter(User.email.ilike("%martysyda%")).all()
+    for u in users:
+        print(f"ID: {u.id}, Name: {u.name}, Email: {u.email}, Role: {u.role}, UniID: {u.university_id}")
+finally:
+    db.close()

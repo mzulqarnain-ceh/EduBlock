@@ -6,8 +6,8 @@ import re
 
 class DegreeIssue(BaseModel):
     student_name: str
-    student_id: str
-    registration_no: Optional[str] = None
+    registration_no: str
+    student_email: Optional[str] = None
     degree_name: str
     grade: Optional[str] = None
     issue_date: str
@@ -46,27 +46,12 @@ class DegreeIssue(BaseModel):
             raise ValueError("Student name must only contain letters, spaces, or dots")
         return trimmed
 
-    @field_validator('student_id')
-    @classmethod
-    def validate_student_id(cls, v):
-        trimmed = v.strip() if v else ""
-        if not trimmed:
-            raise ValueError("Student ID / Email is required")
-        if len(trimmed) < 3 or len(trimmed) > 100:
-            raise ValueError("Student ID / Email must be between 3 and 100 characters")
-            
-        # Injection scan
-        cls._scan_injections(trimmed, "Student ID / Email")
-        return trimmed
-
     @field_validator('registration_no')
     @classmethod
     def validate_registration_no(cls, v):
-        if v is None:
-            return v
-        trimmed = v.strip()
+        trimmed = v.strip() if v else ""
         if not trimmed:
-            return None
+            raise ValueError("Registration number is required")
         if len(trimmed) < 3 or len(trimmed) > 50:
             raise ValueError("Registration number must be between 3 and 50 characters")
             
@@ -76,6 +61,22 @@ class DegreeIssue(BaseModel):
         if not re.match(r"^[a-zA-Z0-9\s/-]+$", trimmed):
             raise ValueError("Registration number must contain only letters, numbers, hyphens, or slashes")
         return trimmed
+
+    @field_validator('student_email')
+    @classmethod
+    def validate_student_email(cls, v):
+        if not v:
+            return None
+        trimmed = v.strip()
+        if not trimmed:
+            return None
+        if len(trimmed) < 3 or len(trimmed) > 100:
+            raise ValueError("Student Email must be between 3 and 100 characters")
+            
+        # Injection scan
+        cls._scan_injections(trimmed, "Student Email")
+        return trimmed
+
 
     @field_validator('degree_name')
     @classmethod
@@ -145,11 +146,22 @@ class DegreeBulkIssue(BaseModel):
     degrees: List[DegreeIssue]
 
 
+class DegreeClaimRequest(BaseModel):
+    university_id: int
+    degree_name: str
+
+
+class DegreeApproveRequest(BaseModel):
+    grade: str
+    issue_date: str
+
+
 class DegreeResponse(BaseModel):
     id: int
     student_name: str
     student_id: str
     registration_no: Optional[str] = None
+    student_email: Optional[str] = None
     degree_name: str
     grade: Optional[str] = None
     issue_date: str

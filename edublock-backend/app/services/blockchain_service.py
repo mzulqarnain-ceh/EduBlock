@@ -141,7 +141,7 @@ class BlockchainService:
         Returns dict with tx_hash, block_number, gas_used, etc.
         """
         if not self.contract:
-            print("⚠️  No contract loaded. Skipping blockchain mint.")
+            print("[Warning] No contract loaded. Skipping blockchain mint.")
             return None
 
         try:

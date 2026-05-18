@@ -65,21 +65,34 @@ def get_audit_logs(
         .all()
     )
 
+    formatted_logs = []
+    for log in logs:
+        action_text = log.action
+        if log.action == "certificate_status_changed" and log.details:
+            details_lower = log.details.lower()
+            if "from '" in details_lower and "' to '" in details_lower:
+                try:
+                    parts = log.details.split("'")
+                    old_s = parts[1].title()
+                    new_s = parts[3].title()
+                    action_text = f"Status Changed: {old_s} ➡️ {new_s}"
+                except Exception:
+                    pass
+
+        formatted_logs.append({
+            "id": log.id,
+            "action": action_text,
+            "user_name": log.user_name or "System",
+            "user_role": log.user_role or "",
+            "target_type": log.target_type or "",
+            "target_id": log.target_id,
+            "target_name": log.target_name or "",
+            "details": log.details or "",
+            "created_at": str(log.created_at) if log.created_at else "",
+        })
+
     return {
-        "logs": [
-            {
-                "id": log.id,
-                "action": log.action,
-                "user_name": log.user_name or "System",
-                "user_role": log.user_role or "",
-                "target_type": log.target_type or "",
-                "target_id": log.target_id,
-                "target_name": log.target_name or "",
-                "details": log.details or "",
-                "created_at": str(log.created_at) if log.created_at else "",
-            }
-            for log in logs
-        ],
+        "logs": formatted_logs,
         "total": total,
         "page": page,
         "limit": limit,

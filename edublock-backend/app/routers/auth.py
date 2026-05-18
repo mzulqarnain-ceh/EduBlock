@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from app.database import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, ForgotPasswordRequest, ResetPasswordRequest
@@ -79,6 +79,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
                 "name": user.name,
                 "email": user.email,
                 "role": user.role.value,
+                "registration_no": user.registration_no,
                 "university_id": user.university_id,
                 "university_name": university_name if user.role == UserRole.ADMIN else None,
                 "profile_image": user.profile_image,
@@ -134,6 +135,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             "name": user.name,
             "email": user.email,
             "role": user.role.value,
+            "registration_no": user.registration_no,
             "university_id": user.university_id,
             "university_name": user.university.name if user.university else None,
             "profile_image": user.profile_image,
@@ -149,6 +151,7 @@ def get_me(current_user: User = Depends(get_current_user)):
         "name": current_user.name,
         "email": current_user.email,
         "role": current_user.role.value,
+        "registration_no": current_user.registration_no,
         "university_id": current_user.university_id,
         "wallet_address": current_user.wallet_address,
         "status": current_user.status.value,
@@ -168,7 +171,7 @@ def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db
 
     # In a real app, generate a secure random token and save to DB
     # For now, we'll use a signed JWT as a simple stateless reset token
-    reset_token = create_access_token(data={"sub": str(user.id), "type": "reset"}, expires_delta=60)
+    reset_token = create_access_token(data={"sub": str(user.id), "type": "reset"}, expires_delta=timedelta(minutes=60))
     
     # Normally this would point to the frontend reset page
     reset_link = f"http://localhost:5173/reset-password?token={reset_token}"
@@ -187,7 +190,7 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
     settings = get_settings()
     
     try:
-        payload = jwt.decode(request.token, settings.JWT_SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(request.token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id = payload.get("sub")
         token_type = payload.get("type")
         

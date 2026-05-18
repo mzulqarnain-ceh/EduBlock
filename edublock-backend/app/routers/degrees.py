@@ -4,13 +4,14 @@ from sqlalchemy.orm import Session
 from typing import Optional
 import hashlib
 import json
+from datetime import datetime
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.degree import Degree, DegreeStatus
 from app.models.transaction import Transaction, TransactionType, TransactionStatus
 from app.models.university import University, UniversityStatus # Add this
 from app.models.audit_log import AuditAction
-from app.schemas.degree import DegreeIssue, DegreeBulkIssue, DegreeResponse, DegreeRevoke, DegreeStatusUpdate, VerifyRequest, VerifyResponse, DegreeBulkDelete
+from app.schemas.degree import DegreeIssue, DegreeBulkIssue, DegreeResponse, DegreeRevoke, DegreeStatusUpdate, VerifyRequest, VerifyResponse, DegreeBulkDelete, DegreeClaimRequest, DegreeApproveRequest
 from app.utils.security import get_current_user, require_role
 from app.services.blockchain_service import blockchain
 from app.routers.audit import create_audit_log
@@ -26,8 +27,8 @@ def generate_degree_hash(degree_data: dict) -> str:
 
 def get_next_token_id(db: Session) -> int:
     """Get the next available token ID."""
-    max_token = db.query(Degree.token_id).order_by(Degree.token_id.desc()).first()
-    return (max_token[0] or 0) + 1 if max_token else 1
+    max_token = db.query(Degree.token_id).filter(Degree.token_id.isnot(None)).order_by(Degree.token_id.desc()).first()
+    return (max_token[0] or 0) + 1 if max_token and max_token[0] is not None else 1
 
 
 def _lookup_student_user(db: Session, registration_no: str, email: str = None) -> Optional[User]:
@@ -53,6 +54,49 @@ def _lookup_student_user(db: Session, registration_no: str, email: str = None) -
     return None
 
 
+def is_major_degree(degree_name: str) -> bool:
+    """Check if degree is a major 4-year degree (BS, Bachelor, etc.)"""
+    name = degree_name.lower()
+    # Exempt short degrees/diplomas
+    if any(x in name for x in ["b.ed", "bed", "diploma", "certificate", "associate"]):
+        return False
+    # Identify major degrees
+    if any(name.startswith(x) for x in ["bs", "b.sc", "bachelor", "bba", "bfa", "be "]):
+        return True
+    return False
+
+def check_overlapping_major_degrees(db: Session, student_name: str, registration_no: str, new_degree_name: str, new_issue_date: str):
+    """Prevent issuing multiple major degrees within a 4-year overlapping period to the same student."""
+    if not is_major_degree(new_degree_name):
+        return # Not a major degree, allowed
+        
+    try:
+        new_date = datetime.strptime(new_issue_date, "%Y-%m-%d")
+    except ValueError:
+        return
+        
+    # Find other degrees for this student
+    existing_degrees = db.query(Degree).filter(
+        func.lower(func.trim(Degree.student_name)) == student_name.lower().strip(),
+        func.lower(func.trim(Degree.registration_no)) == registration_no.lower().strip(),
+        Degree.status != DegreeStatus.REVOKED
+    ).all()
+    
+    for existing in existing_degrees:
+        if is_major_degree(existing.degree_name):
+            try:
+                exist_date = datetime.strptime(existing.issue_date, "%Y-%m-%d")
+                # Calculate difference in years
+                diff_years = abs((new_date - exist_date).days) / 365.25
+                if diff_years < 4:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Student is already enrolled in a major 4-year degree ({existing.degree_name}) during this period. Overlapping major degrees are not allowed."
+                    )
+            except ValueError:
+                continue
+
+
 @router.post("/issue", response_model=DegreeResponse)
 def issue_degree(
     request: DegreeIssue,
@@ -66,21 +110,25 @@ def issue_degree(
     # Validate required fields
     if not request.student_name or not request.student_name.strip():
         raise HTTPException(status_code=400, detail="Student name is required")
-    if not request.student_id or not request.student_id.strip():
-        raise HTTPException(status_code=400, detail="Student ID is required")
+    if not request.registration_no or not request.registration_no.strip():
+        raise HTTPException(status_code=400, detail="Registration number is required")
     if not request.degree_name or not request.degree_name.strip():
         raise HTTPException(status_code=400, detail="Degree name is required")
     if not request.issue_date or not request.issue_date.strip():
         raise HTTPException(status_code=400, detail="Issue date is required")
 
-    # Look up student user for proper linking (check registration_no first, then student_id/email)
-    student_user = _lookup_student_user(db, request.registration_no, request.student_id)
+    # Look up student user for proper linking (check registration_no first, then email)
+    student_user = _lookup_student_user(db, request.registration_no, request.student_email)
     student_user_id = student_user.id if student_user else None
+
+    # Overlapping major degree check
+    check_overlapping_major_degrees(db, request.student_name, request.registration_no, request.degree_name, request.issue_date)
 
     # Generate blockchain hash from degree data
     degree_data = {
         "student_name": request.student_name,
-        "student_id": request.student_id,
+        "student_id": request.registration_no, # Maps registration_no to student_id for backwards compat
+        "registration_no": request.registration_no,
         "degree_name": request.degree_name,
         "grade": request.grade,
         "issue_date": request.issue_date,
@@ -102,12 +150,9 @@ def issue_degree(
         func.lower(func.trim(Degree.student_name)) == request.student_name.lower().strip(),
         func.lower(func.trim(Degree.degree_name)) == request.degree_name.lower().strip(),
         Degree.university_id == current_user.university_id,
-        Degree.status != DegreeStatus.REVOKED
+        Degree.status != DegreeStatus.REVOKED,
+        func.lower(func.trim(Degree.registration_no)) == request.registration_no.lower().strip()
     ]
-    if request.registration_no:
-        dup_filters.append(func.lower(func.trim(Degree.registration_no)) == request.registration_no.lower().strip())
-    else:
-        dup_filters.append(func.lower(func.trim(Degree.student_id)) == request.student_id.lower().strip())
     
     existing_degree = db.query(Degree).filter(*dup_filters).first()
     
@@ -122,8 +167,9 @@ def issue_degree(
     # Create degree record
     degree = Degree(
         student_name=request.student_name,
-        student_id=request.student_id,
+        student_id=request.registration_no,
         registration_no=request.registration_no,
+        student_email=request.student_email,
         degree_name=request.degree_name,
         grade=request.grade,
         issue_date=request.issue_date,
@@ -156,11 +202,11 @@ def issue_degree(
             db.add(tx)
             degree.tx_hash = tx_data["tx_hash"]
             db.commit()
-            print(f"🔗 Degree #{degree.id} minted on blockchain! Tx: {tx_data['tx_hash'][:20]}...")
+            print(f"[Blockchain Mint]: Degree #{degree.id} minted on blockchain! Tx: {tx_data['tx_hash'][:20]}...")
         else:
             _create_mock_transaction(db, degree, current_user)
     except Exception as e:
-        print(f"⚠️  Blockchain minting error: {e}")
+        print(f"[Blockchain Mint Error]: {e}")
         _create_mock_transaction(db, degree, current_user)
 
     # ========== AUDIT LOG ==========
@@ -171,21 +217,23 @@ def issue_degree(
         target_type="degree",
         target_id=degree.id,
         target_name=f"{request.student_name} - {request.degree_name}",
-        details=f"Issued to {request.student_name} ({request.student_id}), Token #{token_id}",
+        details=f"Issued to {request.student_name} ({request.registration_no}), Token #{token_id}",
     )
     db.commit()
 
     # ========== EMAIL NOTIFICATION ==========
     try:
         from app.services.email_service import send_certificate_issued_email
-        send_certificate_issued_email(
-            student_email=request.student_id,
-            student_name=request.student_name,
-            degree_name=request.degree_name,
-            tx_hash=degree.tx_hash or "",
-        )
+        email_to_use = request.student_email or (student_user.email if student_user else None)
+        if email_to_use:
+            send_certificate_issued_email(
+                student_email=email_to_use,
+                student_name=request.student_name,
+                degree_name=request.degree_name,
+                tx_hash=degree.tx_hash or "",
+            )
     except Exception as e:
-        print(f"⚠️  Email notification failed: {e}")
+        print(f"[Email Notification Failed]: {e}")
 
     return degree
 
@@ -203,7 +251,72 @@ def _create_mock_transaction(db: Session, degree: Degree, current_user: User):
     db.add(tx)
     degree.tx_hash = mock_tx_hash
     db.commit()
-    print(f"⚠️  Blockchain unavailable. Mock tx created for degree #{degree.id}")
+    print(f"[Blockchain Warning]: Blockchain unavailable. Mock tx created for degree #{degree.id}")
+
+
+@router.post("/claim", response_model=DegreeResponse)
+def claim_degree(
+    request: DegreeClaimRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("student")),
+):
+    """Allow a registered student to request/claim their degree from a university."""
+    if not current_user.registration_no or not current_user.registration_no.strip():
+        raise HTTPException(
+            status_code=400, 
+            detail="Please set your registration number in your profile first before claiming a degree."
+        )
+
+    # 1. Fetch university name to ensure it exists
+    uni = db.query(University).filter(University.id == request.university_id).first()
+    if not uni:
+        raise HTTPException(status_code=404, detail="Selected University not found")
+
+    # 2. Check if a pending or active degree with this name already exists for this registration no
+    existing = db.query(Degree).filter(
+        func.lower(func.trim(Degree.registration_no)) == current_user.registration_no.lower().strip(),
+        func.lower(func.trim(Degree.degree_name)) == request.degree_name.lower().strip(),
+        Degree.status != DegreeStatus.REVOKED
+    ).first()
+
+    if existing:
+        if existing.status == DegreeStatus.PENDING:
+            raise HTTPException(status_code=400, detail="You have already submitted a pending claim request for this degree.")
+        else:
+            raise HTTPException(status_code=400, detail="This degree is already issued to you!")
+
+    # 3. Create a PENDING Degree record
+    degree = Degree(
+        student_name=current_user.name,
+        student_id=current_user.registration_no,
+        registration_no=current_user.registration_no,
+        student_email=current_user.email,
+        degree_name=request.degree_name,
+        university_id=request.university_id,
+        university_name=uni.name,
+        student_user_id=current_user.id,
+        status=DegreeStatus.PENDING,
+        grade="",
+        issue_date="",  # Filled later by Admin on issuance
+    )
+
+    db.add(degree)
+    db.commit()
+    db.refresh(degree)
+
+    # 4. Audit Log
+    create_audit_log(
+        db=db,
+        action=AuditAction.CERTIFICATE_ISSUED,
+        user=current_user,
+        target_type="degree",
+        target_id=degree.id,
+        target_name=f"{current_user.name} - {request.degree_name}",
+        details=f"Student claimed pending degree for {request.degree_name} from {uni.name}",
+    )
+    db.commit()
+
+    return degree
 
 
 @router.post("/bulk-issue")
@@ -226,11 +339,18 @@ def bulk_issue_degrees(
     for idx, deg_data in enumerate(request.degrees):
         try:
             # Look up student for proper linking
-            student_user = _lookup_student_user(db, deg_data.registration_no, deg_data.student_id)
+            student_user = _lookup_student_user(db, deg_data.registration_no, deg_data.student_email)
+
+            # Overlapping major degree check (raises HTTPException which we'll catch as Exception)
+            try:
+                check_overlapping_major_degrees(db, deg_data.student_name, deg_data.registration_no, deg_data.degree_name, deg_data.issue_date)
+            except HTTPException as he:
+                raise ValueError(he.detail)
 
             degree_dict = {
                 "student_name": deg_data.student_name,
-                "student_id": deg_data.student_id,
+                "student_id": deg_data.registration_no,
+                "registration_no": deg_data.registration_no,
                 "degree_name": deg_data.degree_name,
                 "grade": deg_data.grade,
                 "issue_date": deg_data.issue_date,
@@ -250,12 +370,9 @@ def bulk_issue_degrees(
                 func.lower(func.trim(Degree.student_name)) == deg_data.student_name.lower().strip(),
                 func.lower(func.trim(Degree.degree_name)) == deg_data.degree_name.lower().strip(),
                 Degree.university_id == current_user.university_id,
-                Degree.status != DegreeStatus.REVOKED
+                Degree.status != DegreeStatus.REVOKED,
+                func.lower(func.trim(Degree.registration_no)) == deg_data.registration_no.lower().strip()
             ]
-            if deg_data.registration_no:
-                dup_filters.append(func.lower(func.trim(Degree.registration_no)) == deg_data.registration_no.lower().strip())
-            else:
-                dup_filters.append(func.lower(func.trim(Degree.student_id)) == deg_data.student_id.lower().strip())
             
             existing_degree = db.query(Degree).filter(*dup_filters).first()
             
@@ -267,8 +384,9 @@ def bulk_issue_degrees(
 
             degree = Degree(
                 student_name=deg_data.student_name,
-                student_id=deg_data.student_id,
+                student_id=deg_data.registration_no,
                 registration_no=deg_data.registration_no,
+                student_email=deg_data.student_email,
                 degree_name=deg_data.degree_name,
                 grade=deg_data.grade,
                 issue_date=deg_data.issue_date,
@@ -427,6 +545,118 @@ def get_degree(
     return degree
 
 
+@router.post("/{degree_id}/approve", response_model=DegreeResponse)
+def approve_pending_degree(
+    degree_id: int,
+    request: DegreeApproveRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    """Approve and officially issue a pending student degree claim. Admin only."""
+    if not current_user.university_id:
+        raise HTTPException(status_code=400, detail="Admin is not associated with any university")
+
+    # Fetch the pending degree request
+    degree = db.query(Degree).filter(
+        Degree.id == degree_id,
+        Degree.university_id == current_user.university_id
+    ).first()
+
+    if not degree:
+        raise HTTPException(status_code=404, detail="Pending degree request not found")
+
+    if degree.status != DegreeStatus.PENDING:
+        raise HTTPException(status_code=400, detail="This degree is not in PENDING status")
+
+    # Validate grade and issue date
+    if not request.grade or not request.grade.strip():
+        raise HTTPException(status_code=400, detail="Grade/CGPA is required for approval")
+    if not request.issue_date or not request.issue_date.strip():
+        raise HTTPException(status_code=400, detail="Issue date is required for approval")
+
+    # Overlapping major degree check
+    check_overlapping_major_degrees(db, degree.student_name, degree.registration_no, degree.degree_name, request.issue_date)
+
+    # Generate blockchain hash from degree data
+    degree_data = {
+        "student_name": degree.student_name,
+        "student_id": degree.registration_no,
+        "registration_no": degree.registration_no,
+        "degree_name": degree.degree_name,
+        "grade": request.grade,
+        "issue_date": request.issue_date,
+        "university_id": current_user.university_id,
+    }
+    blockchain_hash = generate_degree_hash(degree_data)
+
+    # Prevent duplicates
+    existing_by_hash = db.query(Degree).filter(Degree.blockchain_hash == blockchain_hash).first()
+    if existing_by_hash:
+        raise HTTPException(status_code=400, detail="Degree already issued against this record.")
+
+    # Assign details and approve
+    token_id = get_next_token_id(db)
+    degree.grade = request.grade
+    degree.issue_date = request.issue_date
+    degree.blockchain_hash = blockchain_hash
+    degree.token_id = token_id
+    degree.status = DegreeStatus.ISSUED
+    degree.issued_by = current_user.id
+
+    db.commit()
+    db.refresh(degree)
+
+    # ========== BLOCKCHAIN MINTING ==========
+    try:
+        tx_data = blockchain.mint_degree(token_id, blockchain_hash)
+        if tx_data:
+            tx = Transaction(
+                tx_hash=tx_data["tx_hash"],
+                type=TransactionType.MINT,
+                degree_id=degree.id,
+                from_address=tx_data["from_address"],
+                status=TransactionStatus.CONFIRMED if tx_data["status"] == "confirmed" else TransactionStatus.FAILED,
+                block_number=tx_data["block_number"],
+                gas_used=tx_data["gas_used"],
+            )
+            db.add(tx)
+            degree.tx_hash = tx_data["tx_hash"]
+            db.commit()
+        else:
+            _create_mock_transaction(db, degree, current_user)
+    except Exception as e:
+        print(f"[Blockchain Warning] Blockchain approval minting error: {e}")
+        _create_mock_transaction(db, degree, current_user)
+
+    # ========== AUDIT LOG ==========
+    create_audit_log(
+        db=db,
+        action=AuditAction.CERTIFICATE_ISSUED,
+        user=current_user,
+        target_type="degree",
+        target_id=degree.id,
+        target_name=f"{degree.student_name} - {degree.degree_name}",
+        details=f"Approved pending claim and issued to {degree.student_name} ({degree.registration_no}), Token #{token_id}",
+    )
+    db.commit()
+
+    # ========== EMAIL NOTIFICATION ==========
+    try:
+        from app.services.email_service import send_certificate_issued_email
+        email_to_use = degree.student_email
+        if email_to_use:
+            send_certificate_issued_email(
+                student_email=email_to_use,
+                student_name=degree.student_name,
+                degree_name=degree.degree_name,
+                tx_hash=degree.tx_hash or "",
+            )
+    except Exception as e:
+        print(f"[Email Notification Failed on Approval]: {e}")
+
+    return degree
+
+
 @router.put("/{degree_id}/status")
 def update_degree_status(
     degree_id: int,
@@ -469,7 +699,7 @@ def update_degree_status(
         db.commit()
     except Exception as e:
         db.rollback()
-        print(f"⚠️  Audit log failed for status change: {e}")
+        print(f"[Audit Log Error]: Audit log failed for status change: {e}")
 
     return {"message": f"Certificate status changed from '{old_status}' to '{request.status.lower()}'"}
 
@@ -494,7 +724,7 @@ def revoke_degree(
         if degree.token_id and blockchain.is_connected:
             blockchain.revoke_on_chain(degree.token_id)
     except Exception as e:
-        print(f"⚠️  Blockchain revoke failed: {e}")
+        print(f"[Blockchain Revoke Failed]: {e}")
 
     degree.status = DegreeStatus.REVOKED
     degree.revoke_reason = request.reason
@@ -522,7 +752,7 @@ def revoke_degree(
             reason=request.reason,
         )
     except Exception as e:
-        print(f"⚠️  Email notification failed: {e}")
+        print(f"[Email Notification Failed]: {e}")
 
     return {"message": f"Degree for '{degree.student_name}' has been revoked"}
 

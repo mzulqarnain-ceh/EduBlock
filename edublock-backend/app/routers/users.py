@@ -114,7 +114,7 @@ def delete_user(
 from fastapi import UploadFile, File
 import shutil
 import os
-from app.schemas.user import ChangePasswordRequest, PreferencesUpdate
+from app.schemas.user import ChangePasswordRequest, PreferencesUpdate, UserProfileUpdate
 from app.utils.security import verify_password
 
 @router.put("/me/password")
@@ -170,6 +170,43 @@ def upload_profile_photo(
     return {"message": "Profile photo updated", "profile_image": current_user.profile_image}
 
 
+@router.put("/me")
+def update_profile(
+    request: UserProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update current user's email address."""
+    if request.email is not None:
+        email_val = request.email.strip().lower()
+        if email_val != current_user.email.lower():
+            # Check if email is already taken
+            existing = db.query(User).filter(User.email == email_val).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="This email address is already in use by another account.")
+            current_user.email = email_val
+            
+    db.commit()
+    db.refresh(current_user)
+    
+    # Get university name if available
+    uni_name = current_user.university.name if current_user.university else None
+    
+    return {
+        "message": "Profile updated successfully",
+        "user": {
+            "id": current_user.id,
+            "name": current_user.name,
+            "email": current_user.email,
+            "role": current_user.role.value,
+            "registration_no": current_user.registration_no,
+            "university_id": current_user.university_id,
+            "university_name": uni_name,
+            "profile_image": current_user.profile_image,
+        }
+    }
+
+
 @router.get("/me/preferences")
 def get_preferences(current_user: User = Depends(get_current_user)):
     """Get user preferences."""
@@ -186,3 +223,18 @@ def update_preferences(
     current_user.preferences = request.preferences
     db.commit()
     return {"message": "Preferences updated", "preferences": current_user.preferences}
+
+
+@router.post("/me/test-email")
+def trigger_test_email(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Trigger a diagnostic test email to the current user's email."""
+    from app.services.email_service import send_test_email
+    
+    success = send_test_email(current_user.email, current_user.name)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send test email. Please check SMTP / Resend API settings.")
+        
+    return {"message": "Test email sent successfully!"}

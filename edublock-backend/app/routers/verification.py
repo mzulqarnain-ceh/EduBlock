@@ -82,7 +82,7 @@ def verify_degree(request: VerifyRequest, db: Session = Depends(get_db)):
     except Exception as e:
         blockchain_status = "blockchain_error"
         blockchain_error = str(e)
-        print(f"⚠️  Blockchain verification error: {e}")
+        print(f"[Blockchain Verification Error]: {e}")
 
     status_msg = "✅ This degree is authentic and verified."
     if blockchain_status == "verified_on_chain":

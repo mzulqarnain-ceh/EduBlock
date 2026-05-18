@@ -52,6 +52,9 @@ def get_dashboard_stats(
         total_users = db.query(User).count()
         total_universities = db.query(University).count()
         total_transactions = db.query(Transaction).count()
+        total_issued = db.query(Degree).filter(Degree.status == DegreeStatus.ISSUED).count()
+        total_pending = db.query(Degree).filter(Degree.status == DegreeStatus.PENDING).count()
+        total_revoked = db.query(Degree).filter(Degree.status == DegreeStatus.REVOKED).count()
 
         # Monthly Certificates Issued (last 6 months)
         six_months_ago = datetime.now() - timedelta(days=180)
@@ -92,6 +95,19 @@ def get_dashboard_stats(
             }
             display_action, action_type = action_map.get(log.action, (log.action.replace('_', ' ').title(), "info"))
             
+            # Special dynamic formatting for certificate status changes to show transitions
+            if log.action == "certificate_status_changed" and log.details:
+                details_lower = log.details.lower()
+                if "from '" in details_lower and "' to '" in details_lower:
+                    try:
+                        parts = log.details.split("'")
+                        old_s = parts[1].title()
+                        new_s = parts[3].title()
+                        display_action = f"Status Changed: {old_s} ➡️ {new_s}"
+                        action_type = "warning" if new_s == "Pending" else "success" if new_s == "Issued" else "info"
+                    except Exception:
+                        pass
+
             formatted_logs.append({
                 "action": display_action,
                 "user": log.user_name or log.target_name or "System",
@@ -104,6 +120,9 @@ def get_dashboard_stats(
             "total_users": total_users,
             "total_universities": total_universities,
             "total_transactions": total_transactions,
+            "total_issued": total_issued,
+            "total_pending": total_pending,
+            "total_revoked": total_revoked,
             "monthly_issued": formatted_monthly,
             "university_issued": formatted_uni,
             "recent_activity": formatted_logs

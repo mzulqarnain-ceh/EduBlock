@@ -38,3 +38,7 @@ class User(Base):
     # Relationships
     university = relationship("University", back_populates="users", foreign_keys=[university_id])
     issued_degrees = relationship("Degree", back_populates="issued_by_user", foreign_keys="Degree.issued_by")
+
+    @property
+    def university_name(self):
+        return self.university.name if self.university else None

@@ -339,7 +339,7 @@ const Verification = () => {
                                             <Button
                                                 variant="outline"
                                                 className="flex-1"
-                                                onClick={() => generateCertificatePDF({
+                                                onClick={async () => await generateCertificatePDF({
                                                     studentName: result.studentName,
                                                     courseName: result.courseName,
                                                     institution: result.institution,

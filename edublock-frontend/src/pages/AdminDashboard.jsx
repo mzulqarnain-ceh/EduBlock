@@ -188,6 +188,21 @@ const validateRegistrationNumber = (val) => {
     return null;
 };
 
+const validateStudentEmail = (val) => {
+    if (!val) return null; // Optional
+    const trimmed = String(val).trim();
+    if (!trimmed) return null;
+    
+    const injectionErr = scanInjections(trimmed);
+    if (injectionErr) return injectionErr;
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmed)) {
+        return "Please enter a valid email address.";
+    }
+    return null;
+};
+
 const validateDegreeName = (val) => {
     const trimmed = val ? String(val).trim() : '';
     if (!trimmed) return "Degree name is required.";
@@ -277,8 +292,8 @@ const AdminDashboard = () => {
 
     const [formData, setFormData] = useState({
         studentName: '',
-        studentId: '',
         registrationNumber: '',
+        studentEmail: '',
         degreeName: '',
         universityName: adminUniversityName,
         grade: '',
@@ -332,6 +347,13 @@ const AdminDashboard = () => {
     // Pending Transactions Data
     const [pendingTransactions, setPendingTransactions] = useState([]);
 
+    // Pending Degree Claims Approval States
+    const [showApproveModal, setShowApproveModal] = useState(false);
+    const [selectedPendingClaim, setSelectedPendingClaim] = useState(null);
+    const [approveData, setApproveData] = useState({ grade: '', issueDate: '' });
+    const [approvingClaim, setApprovingClaim] = useState(false);
+    const [approveErrors, setApproveErrors] = useState({});
+
     // Fetch certificates and stats from backend on mount
     useEffect(() => {
         const fetchData = async () => {
@@ -347,8 +369,10 @@ const AdminDashboard = () => {
                     id: cert.id,
                     studentName: cert.student_name,
                     studentId: cert.student_id,
+                    studentEmail: cert.student_email || '',
                     degreeName: cert.degree_name,
-                    issueDate: cert.issue_date,
+                    grade: cert.grade || '',
+                    issueDate: cert.issue_date || '',
                     status: cert.status?.toLowerCase() === 'issued' ? 'Issued' : cert.status?.toLowerCase() === 'revoked' ? 'Revoked' : 'Pending',
                     hash: cert.blockchain_hash || '',
                     txHash: cert.tx_hash || '',
@@ -463,6 +487,63 @@ const AdminDashboard = () => {
     useEffect(() => {
         setBulkPage(1);
     }, [csvData]);
+
+    const handleApproveClick = (claim) => {
+        setSelectedPendingClaim(claim);
+        setApproveData({ grade: '', issueDate: getTodayDateString() });
+        setApproveErrors({});
+        setShowApproveModal(true);
+    };
+
+    const handleApproveSubmit = async (e) => {
+        e.preventDefault();
+        
+        // Validate grade and issue date
+        const newErrors = {};
+        const gradeErr = validateGradeOrCGPA(approveData.grade);
+        if (gradeErr) newErrors.grade = gradeErr;
+        const dateErr = validateIssueDate(approveData.issueDate);
+        if (dateErr) newErrors.issueDate = dateErr;
+
+        if (Object.keys(newErrors).length > 0) {
+            setApproveErrors(newErrors);
+            return;
+        }
+
+        setApprovingClaim(true);
+        try {
+            const response = await degreesAPI.approve(selectedPendingClaim.id, {
+                grade: approveData.grade.trim(),
+                issue_date: approveData.issueDate,
+            });
+
+            const updatedCert = response.data;
+            
+            // Update issuedCertificates state dynamically
+            setIssuedCertificates(prev => prev.map(cert => 
+                cert.id === selectedPendingClaim.id
+                    ? {
+                        ...cert,
+                        status: 'Issued',
+                        grade: updatedCert.grade,
+                        issueDate: updatedCert.issue_date,
+                        hash: updatedCert.blockchain_hash || '',
+                        txHash: updatedCert.tx_hash || '',
+                      }
+                    : cert
+            ));
+
+            showNotification('success', `Degree claim for ${selectedPendingClaim.studentName} has been approved and issued on blockchain successfully!`);
+            setShowApproveModal(false);
+            setSelectedPendingClaim(null);
+        } catch (err) {
+            console.error('Error approving degree claim:', err);
+            const msg = err.response?.data?.detail || 'Failed to approve degree claim.';
+            showNotification('error', msg);
+        } finally {
+            setApprovingClaim(false);
+        }
+    };
 
     const handleRevoke = async () => {
         if (!selectedCert || !revokeReason.trim()) return;
@@ -624,6 +705,9 @@ const AdminDashboard = () => {
         const regErr = validateRegistrationNumber(formData.registrationNumber);
         if (regErr) newErrors.registrationNumber = regErr;
 
+        const emailErr = validateStudentEmail(formData.studentEmail);
+        if (emailErr) newErrors.studentEmail = emailErr;
+
         const degErr = validateDegreeName(formData.degreeName);
         if (degErr) newErrors.degreeName = degErr;
 
@@ -642,6 +726,7 @@ const AdminDashboard = () => {
         let errorMsg = null;
         if (name === 'studentName') errorMsg = validateStudentName(value);
         else if (name === 'registrationNumber') errorMsg = validateRegistrationNumber(value);
+        else if (name === 'studentEmail') errorMsg = validateStudentEmail(value);
         else if (name === 'degreeName') errorMsg = validateDegreeName(value);
         else if (name === 'grade') errorMsg = validateGradeOrCGPA(value);
         else if (name === 'issueDate') errorMsg = validateIssueDate(value);
@@ -668,6 +753,7 @@ const AdminDashboard = () => {
             let errorMsg = null;
             if (name === 'studentName') errorMsg = validateStudentName(value);
             else if (name === 'registrationNumber') errorMsg = validateRegistrationNumber(value);
+            else if (name === 'studentEmail') errorMsg = validateStudentEmail(value);
             else if (name === 'degreeName') errorMsg = validateDegreeName(value);
             else if (name === 'grade') errorMsg = validateGradeOrCGPA(value);
             else if (name === 'issueDate') errorMsg = validateIssueDate(value);
@@ -694,8 +780,8 @@ const AdminDashboard = () => {
             // Call backend API to issue certificate
             const response = await degreesAPI.issue({
                 student_name: formData.studentName.trim(),
-                student_id: formData.registrationNumber.trim(), // Fallback student_id to registration_no
                 registration_no: formData.registrationNumber.trim(),
+                student_email: formData.studentEmail.trim(),
                 degree_name: formData.degreeName.trim(),
                 grade: formData.grade.trim(),
                 issue_date: formData.issueDate,
@@ -709,6 +795,7 @@ const AdminDashboard = () => {
                 id: cert.id,
                 studentName: cert.student_name,
                 studentId: cert.student_id,
+                studentEmail: cert.student_email,
                 degreeName: cert.degree_name,
                 issueDate: cert.issue_date,
                 status: 'Issued',
@@ -719,8 +806,8 @@ const AdminDashboard = () => {
 
             setFormData({
                 studentName: '',
-                studentId: '',
                 registrationNumber: '',
+                studentEmail: '',
                 degreeName: '',
                 universityName: adminUniversityName,
                 grade: '',
@@ -834,6 +921,7 @@ const AdminDashboard = () => {
             const degrees = csvData.map(row => ({
                 registration_no: row['Registration No'] || row['registrationNo'] || '',
                 student_name: row['Student Name'] || row['studentName'] || 'Unknown',
+                student_email: row['Student Email'] || row['studentEmail'] || '',
                 student_id: row['Registration No'] || row['registrationNo'] || 'BULK-' + Date.now(), // Fallback to reg no for legacy student_id field
                 degree_name: row['Degree Name'] || row['degreeName'] || 'Unknown',
                 grade: row['Grade'] || row['grade'] || '',
@@ -846,6 +934,7 @@ const AdminDashboard = () => {
                 const rowNum = index + 1;
                 const nameErr = validateStudentName(deg.student_name);
                 const regErr = validateRegistrationNumber(deg.registration_no);
+                const emailErr = validateStudentEmail(deg.student_email);
                 const degErr = validateDegreeName(deg.degree_name);
                 
                 // Trim and uppercase grade
@@ -855,6 +944,7 @@ const AdminDashboard = () => {
 
                 if (nameErr) errorsList.push(`Row ${rowNum} Name: ${nameErr}`);
                 if (regErr) errorsList.push(`Row ${rowNum} Reg No: ${regErr}`);
+                if (emailErr) errorsList.push(`Row ${rowNum} Email: ${emailErr}`);
                 if (degErr) errorsList.push(`Row ${rowNum} Degree: ${degErr}`);
                 if (gradeErr) errorsList.push(`Row ${rowNum} Grade/CGPA: ${gradeErr}`);
                 if (dateErr) errorsList.push(`Row ${rowNum} Date: ${dateErr}`);
@@ -911,7 +1001,7 @@ const AdminDashboard = () => {
     };
 
     const downloadSampleCSV = () => {
-        const csvContent = `Registration No,Student Name,Degree Name,Grade,Issue Date\n2020-AG-001,John Doe,BS Computer Science,A+,2025-01-15\n2020-AG-002,Jane Smith,BS Data Science,A,2025-01-14\n2020-AG-003,Mike Johnson,BS Electrical Engineering,B+,2025-01-13`;
+        const csvContent = `Registration No,Student Email,Student Name,Degree Name,Grade,Issue Date\n2020-AG-001,john@university.edu,John Doe,BS Computer Science,A+,2025-01-15\n2020-AG-002,jane@university.edu,Jane Smith,BS Data Science,A,2025-01-14\n2020-AG-003,,Mike Johnson,BS Electrical Engineering,B+,2025-01-13`;
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -944,7 +1034,7 @@ const AdminDashboard = () => {
                         {[
                             { id: 'issue', icon: '📝', label: 'Issue' },
                             { id: 'certificates', icon: '📋', label: `Certificates (${issuedCertificates.length})` },
-                            { id: 'pending', icon: '⏳', label: `Pending (${pendingTransactions.length})` },
+                            { id: 'pending', icon: '⏳', label: `Pending (${issuedCertificates.filter(c => c.status === 'Pending').length})` },
                             { id: 'audit', icon: '📊', label: 'Audit Log' },
                             { id: 'bulk', icon: '📤', label: 'Bulk Upload' },
                         ].map(tab => (
@@ -1058,6 +1148,34 @@ const AdminDashboard = () => {
                                                     className="text-red-400 text-xs mt-1"
                                                 >
                                                     ⚠️ {errors.registrationNumber}
+                                                </motion.p>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <label htmlFor="studentEmail" className="block text-sm font-medium mb-2 text-white/70">
+                                                Student Email (Optional)
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">📧</span>
+                                                <input
+                                                    id="studentEmail"
+                                                    name="studentEmail"
+                                                    type="email"
+                                                    value={formData.studentEmail}
+                                                    onChange={handleInputChange}
+                                                    onBlur={handleBlur}
+                                                    placeholder="For email notification"
+                                                    className={`input-field w-full pl-12 ${errors.studentEmail ? 'border-red-500 focus:border-red-500/50' : ''}`}
+                                                />
+                                            </div>
+                                            {errors.studentEmail && (
+                                                <motion.p
+                                                    initial={{ opacity: 0, y: -5 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    className="text-red-400 text-xs mt-1"
+                                                >
+                                                    ⚠️ {errors.studentEmail}
                                                 </motion.p>
                                             )}
                                         </div>
@@ -1239,7 +1357,7 @@ const AdminDashboard = () => {
                                     <DonutChart
                                         data={degreeDistribution}
                                         title="Certificates by Degree"
-                                        centerValue="115"
+                                        centerValue={String(issuedCertificates.length)}
                                         centerLabel="Total"
                                     />
                                 </Card>
@@ -1382,6 +1500,9 @@ const AdminDashboard = () => {
                                                 <td className="py-4 px-4">
                                                     <p className="font-semibold">{cert.studentName}</p>
                                                     <p className="text-white/50 text-xs">{cert.studentId}</p>
+                                                    {cert.studentEmail && (
+                                                        <p className="text-amber-400/80 text-xs">{cert.studentEmail}</p>
+                                                    )}
                                                 </td>
                                                 <td className="py-4 px-4 text-white/70">{cert.degreeName}</td>
                                                 <td className="py-4 px-4 text-white/70">{cert.issueDate}</td>
@@ -1484,79 +1605,107 @@ const AdminDashboard = () => {
                         </Card>
                     )}
 
-                    {/* Pending Transactions Tab */}
+                    {/* Pending Claims Tab */}
                     {activeTab === 'pending' && (
                         <Card>
                             <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-bold">⏳ Pending Transactions</h2>
+                                <div>
+                                    <h2 className="text-2xl font-bold">⏳ Pending Degree Requests</h2>
+                                    <p className="text-white/50 text-sm">Review, verify, and approve degree claim requests submitted by students</p>
+                                </div>
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => showNotification('info', 'Refreshing transactions...')}
+                                    onClick={async () => {
+                                        showNotification('info', 'Refreshing claims list...');
+                                        try {
+                                            const certsRes = await degreesAPI.list();
+                                            const certs = certsRes.data.map(cert => ({
+                                                id: cert.id,
+                                                studentName: cert.student_name,
+                                                studentId: cert.student_id,
+                                                studentEmail: cert.student_email || '',
+                                                degreeName: cert.degree_name,
+                                                grade: cert.grade || '',
+                                                issueDate: cert.issue_date || '',
+                                                status: cert.status?.toLowerCase() === 'issued' ? 'Issued' : cert.status?.toLowerCase() === 'revoked' ? 'Revoked' : 'Pending',
+                                                hash: cert.blockchain_hash || '',
+                                                txHash: cert.tx_hash || '',
+                                                revokeReason: cert.revoke_reason || '',
+                                            }));
+                                            setIssuedCertificates(certs);
+                                            showNotification('success', 'Claims list refreshed!');
+                                        } catch (err) {
+                                            showNotification('error', 'Failed to refresh list.');
+                                        }
+                                    }}
                                 >
                                     🔄 Refresh
                                 </Button>
                             </div>
 
-                            {pendingTransactions.length > 0 ? (
-                                <div className="space-y-4">
-                                    {pendingTransactions.map((tx) => (
-                                        <div key={tx.id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
-                                            <div className="flex items-center gap-4">
-                                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${tx.status === 'Pending' ? 'bg-orange-500/20' :
-                                                    tx.status === 'Processing' ? 'bg-blue-500/20' :
-                                                        'bg-emerald-500/20'
-                                                    }`}>
-                                                    <span className="text-xl">
-                                                        {tx.status === 'Pending' ? '⏳' :
-                                                            tx.status === 'Processing' ? '⚙️' : '✓'}
-                                                    </span>
-                                                </div>
-                                                <div>
-                                                    <p className="font-semibold">{tx.studentName}</p>
-                                                    <p className="text-white/50 text-sm">{tx.degreeName}</p>
-                                                </div>
-                                            </div>
-                                            <div className="text-center">
-                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${tx.status === 'Pending' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
-                                                    tx.status === 'Processing' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
-                                                        'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                                    }`}>
-                                                    {tx.status}
-                                                </span>
-                                                <p className="text-white/40 text-xs mt-1">{tx.submittedAt}</p>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <Button
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    onClick={() => showNotification('info', 'Checking transaction status...')}
-                                                >
-                                                    🔍 Check
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="border-red-500 text-red-400 hover:bg-red-500/10"
-                                                    onClick={() => {
-                                                        setPendingTransactions(prev => prev.filter(t => t.id !== tx.id));
-                                                        showNotification('warning', 'Transaction cancelled');
-                                                    }}
-                                                >
-                                                    ❌ Cancel
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ))}
+                            {issuedCertificates.filter(c => c.status === 'Pending').length > 0 ? (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-white/10">
+                                                <th className="py-3 px-4 text-white/80 font-semibold text-sm">Student</th>
+                                                <th className="py-3 px-4 text-white/80 font-semibold text-sm">Requested Degree</th>
+                                                <th className="py-3 px-4 text-white/80 font-semibold text-sm">Status</th>
+                                                <th className="py-3 px-4 text-center text-white/80 font-semibold text-sm">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {issuedCertificates.filter(c => c.status === 'Pending').map((claim) => (
+                                                <tr key={claim.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                                                    <td className="py-4 px-4">
+                                                        <p className="font-semibold text-white">{claim.studentName}</p>
+                                                        <p className="text-white/50 text-xs font-mono">Reg No: {claim.studentId}</p>
+                                                        {claim.studentEmail && (
+                                                            <p className="text-amber-400/80 text-xs">{claim.studentEmail}</p>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-4 px-4 text-white/70">
+                                                        {claim.degreeName}
+                                                    </td>
+                                                    <td className="py-4 px-4">
+                                                        <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 px-3 py-1 rounded-full text-xs font-semibold">
+                                                            Pending Approval
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-4 px-4 text-center">
+                                                        <div className="flex gap-2 justify-center">
+                                                            <Button
+                                                                variant="primary"
+                                                                className="bg-gradient-to-r from-amber-500 to-emerald-500 hover:opacity-90 text-black border-none"
+                                                                size="sm"
+                                                                onClick={() => handleApproveClick(claim)}
+                                                            >
+                                                                ✓ Review & Approve
+                                                            </Button>
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+                                                                onClick={() => handleDelete(claim)}
+                                                            >
+                                                                Reject Request
+                                                            </Button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             ) : (
                                 <div className="text-center py-16 flex flex-col items-center justify-center">
                                     <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-4 border border-emerald-500/20">
                                         <span className="text-3xl text-emerald-400">⚡</span>
                                     </div>
-                                    <h3 className="text-xl font-semibold mb-2">All Transactions Confirmed</h3>
+                                    <h3 className="text-xl font-semibold mb-2">No Pending Degree Claims</h3>
                                     <p className="text-white/50 max-w-md text-sm">
-                                        All blockchain transactions are successfully mined and confirmed. No transactions are currently pending in the mempool (Ganache instant-mining active).
+                                        All student degree claim requests have been reviewed, verified, and issued on the blockchain.
                                     </p>
                                 </div>
                             )}
@@ -1706,7 +1855,7 @@ const AdminDashboard = () => {
                                 <div className="mt-6 p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl">
                                     <p className="text-amber-400 text-sm font-medium mb-2">📋 Required CSV Format:</p>
                                     <code className="text-white/60 text-xs block bg-black/30 p-3 rounded-lg font-mono">
-                                        Registration No, Student Name, Degree Name, Grade, Issue Date
+                                        Registration No, Student Email, Student Name, Degree Name, Grade, Issue Date
                                     </code>
                                 </div>
                             </Card>
@@ -2005,6 +2154,104 @@ const AdminDashboard = () => {
                                     Revoke Certificate
                                 </Button>
                             </div>
+                        </Card>
+                    </motion.div>
+                </div>
+            )}
+
+            {/* Approve Degree Claim Modal */}
+            {showApproveModal && selectedPendingClaim && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="max-w-md w-full"
+                    >
+                        <Card>
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold text-emerald-400">🎓 Approve & Issue Degree</h2>
+                                <button
+                                    onClick={() => {
+                                        setShowApproveModal(false);
+                                        setSelectedPendingClaim(null);
+                                    }}
+                                    className="text-white/60 hover:text-white"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg space-y-2">
+                                <div className="text-xs text-emerald-400/80 uppercase font-semibold tracking-wider">Student & Claim Details</div>
+                                <div className="text-sm">
+                                    <p className="font-semibold text-white">{selectedPendingClaim.studentName}</p>
+                                    <p className="text-white/60 text-xs">Reg No: {selectedPendingClaim.studentId}</p>
+                                    <p className="text-white/60 text-xs">Degree: {selectedPendingClaim.degreeName}</p>
+                                </div>
+                            </div>
+
+                            <form onSubmit={handleApproveSubmit} className="space-y-4">
+                                <div>
+                                    <label htmlFor="approveGrade" className="block text-sm font-medium mb-2 text-white/70">
+                                        Grade / CGPA *
+                                    </label>
+                                    <input
+                                        id="approveGrade"
+                                        type="text"
+                                        value={approveData.grade}
+                                        onChange={(e) => setApproveData({ ...approveData, grade: e.target.value.toUpperCase() })}
+                                        placeholder="e.g. A+, A, 3.84"
+                                        className={`input-field w-full ${approveErrors.grade ? 'border-red-500' : ''}`}
+                                        required
+                                    />
+                                    {approveErrors.grade && (
+                                        <p className="text-red-400 text-xs mt-1">⚠️ {approveErrors.grade}</p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label htmlFor="approveIssueDate" className="block text-sm font-medium mb-2 text-white/70">
+                                        Issue Date *
+                                    </label>
+                                    <input
+                                        id="approveIssueDate"
+                                        type="date"
+                                        max={getTodayDateString()}
+                                        value={approveData.issueDate}
+                                        onChange={(e) => setApproveData({ ...approveData, issueDate: e.target.value })}
+                                        className={`input-field w-full ${approveErrors.issueDate ? 'border-red-500' : ''}`}
+                                        required
+                                    />
+                                    {approveErrors.issueDate && (
+                                        <p className="text-red-400 text-xs mt-1">⚠️ {approveErrors.issueDate}</p>
+                                    )}
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <Button
+                                        variant="secondary"
+                                        className="flex-1"
+                                        type="button"
+                                        onClick={() => {
+                                            setShowApproveModal(false);
+                                            setSelectedPendingClaim(null);
+                                        }}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        variant="primary"
+                                        className="flex-1 bg-gradient-to-r from-amber-500 to-emerald-500 text-black border-none font-semibold"
+                                        type="submit"
+                                        loading={approvingClaim}
+                                        disabled={approvingClaim}
+                                    >
+                                        {approvingClaim ? 'Issuing...' : '✓ Approve & Mint'}
+                                    </Button>
+                                </div>
+                            </form>
                         </Card>
                     </motion.div>
                 </div>

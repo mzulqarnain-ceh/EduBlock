@@ -48,10 +48,31 @@ const SuperAdminDashboard = () => {
         thisMonth: 0,
         verifications: 0,
         activeUsers: 0,
+        totalIssued: 0,
+        totalPending: 0,
+        totalRevoked: 0,
         monthly_issued: [],
         university_issued: [],
         recent_activity: []
     });
+
+    const formatDateTime = (dateString) => {
+        if (!dateString || dateString === 'Never') return 'Never';
+        try {
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return dateString;
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        } catch (e) {
+            return dateString;
+        }
+    };
 
     // Fetch all data from backend
     useEffect(() => {
@@ -78,10 +99,11 @@ const SuperAdminDashboard = () => {
                     name: u.name,
                     email: u.email,
                     role: u.role,
+                    universityName: u.university_name || '',
                     status: u.status?.toLowerCase() === 'active' ? 'Active' : 
                             u.status?.toLowerCase() === 'suspended' ? 'Suspended' : 
                             u.status?.toLowerCase() === 'pending' ? 'Pending' : 'Inactive',
-                    lastLogin: u.last_login || 'Never',
+                    lastLogin: formatDateTime(u.last_login),
                     selected: false,
                 })));
 
@@ -92,6 +114,9 @@ const SuperAdminDashboard = () => {
                     thisMonth: s.monthly_issued?.length > 0 ? s.monthly_issued[s.monthly_issued.length - 1].count : 0,
                     verifications: 0,
                     activeUsers: s.total_users || 0,
+                    totalIssued: s.total_issued || 0,
+                    totalPending: s.total_pending || 0,
+                    totalRevoked: s.total_revoked || 0,
                     monthly_issued: s.monthly_issued || [],
                     university_issued: s.university_issued || [],
                     recent_activity: s.recent_activity || []
@@ -265,10 +290,11 @@ const SuperAdminDashboard = () => {
                     name: u.name,
                     email: u.email,
                     role: u.role,
+                    universityName: u.university_name || '',
                     status: u.status?.toLowerCase() === 'active' ? 'Active' : 
                             u.status?.toLowerCase() === 'suspended' ? 'Suspended' : 
                             u.status?.toLowerCase() === 'pending' ? 'Pending' : 'Inactive',
-                    lastLogin: u.last_login || 'Never',
+                    lastLogin: formatDateTime(u.last_login),
                     selected: false,
                 })));
             } catch (err) {
@@ -612,7 +638,7 @@ const SuperAdminDashboard = () => {
                                                 const matchesSearch =
                                                     user.name.toLowerCase().includes(userSearch.toLowerCase()) ||
                                                     user.email.toLowerCase().includes(userSearch.toLowerCase());
-                                                const matchesRole = userRoleFilter === 'all' || user.role === userRoleFilter;
+                                                const matchesRole = userRoleFilter === 'all' || user.role?.toLowerCase() === userRoleFilter.toLowerCase();
                                                 const matchesStatus = userStatusFilter === 'all' || user.status === userStatusFilter;
                                                 return matchesSearch && matchesRole && matchesStatus;
                                             })
@@ -621,6 +647,11 @@ const SuperAdminDashboard = () => {
                                                     <td className="py-4 px-4">
                                                         <p className="font-semibold">{user.name}</p>
                                                         <p className="text-white/50 text-xs">{user.email}</p>
+                                                        {user.role?.toLowerCase() === 'admin' && user.universityName && (
+                                                            <p className="text-cyan-400/85 text-xs mt-1 font-medium flex items-center gap-1">
+                                                                🏛️ {user.universityName}
+                                                            </p>
+                                                        )}
                                                     </td>
                                                     <td className="py-4 px-4">
                                                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${user.role?.toLowerCase() === 'admin'
@@ -913,6 +944,48 @@ const SuperAdminDashboard = () => {
                                         </div>
                                     </div>
                                 </Card>
+                            </div>
+
+                            {/* Certificate Status Breakdown */}
+                            <div className="mt-8">
+                                <h3 className="text-xl font-bold mb-4">📜 Certificate Status Breakdown</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <Card>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(34,197,94,0.2)]">
+                                                <span className="text-2xl">✅</span>
+                                            </div>
+                                            <div>
+                                                <p className="text-white/60 text-sm">Verified Certificates</p>
+                                                <p className="text-3xl font-bold text-green-400">{analytics.totalIssued}</p>
+                                            </div>
+                                        </div>
+                                    </Card>
+
+                                    <Card>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-gradient-to-r from-amber-500 to-yellow-500 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                                                <span className="text-2xl">⏳</span>
+                                            </div>
+                                            <div>
+                                                <p className="text-white/60 text-sm">Pending Claims</p>
+                                                <p className="text-3xl font-bold text-amber-400">{analytics.totalPending}</p>
+                                            </div>
+                                        </div>
+                                    </Card>
+
+                                    <Card>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-rose-500 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+                                                <span className="text-2xl">🚫</span>
+                                            </div>
+                                            <div>
+                                                <p className="text-white/60 text-sm">Revoked Certificates</p>
+                                                <p className="text-3xl font-bold text-red-400">{analytics.totalRevoked}</p>
+                                            </div>
+                                        </div>
+                                    </Card>
+                                </div>
                             </div>
 
                             {/* Charts Row */}

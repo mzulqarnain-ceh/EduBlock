@@ -71,6 +71,14 @@ def startup():
             db.commit()
         except Exception:
             db.rollback()
+            
+        # Add student_email column to degrees table if it doesn't exist
+        try:
+            db.execute(text("ALTER TABLE degrees ADD COLUMN student_email VARCHAR(255)"))
+            db.commit()
+            print("✅ Migration: Added 'student_email' column to degrees table")
+        except Exception:
+            db.rollback()
 
     except Exception as e:
         print(f"⚠️  Migration check: {e}")

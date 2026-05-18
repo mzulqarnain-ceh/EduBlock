@@ -77,6 +77,12 @@ export const degreesAPI = {
 
     bulkDelete: (degreeIds) =>
         api.post('/degrees/bulk-delete', { degree_ids: degreeIds }),
+
+    claim: (data) =>
+        api.post('/degrees/claim', data),
+
+    approve: (id, data) =>
+        api.post(`/degrees/${id}/approve`, data),
 };
 
 // ==================== VERIFICATION ====================
@@ -126,6 +132,9 @@ export const usersAPI = {
     updatePassword: (current_password, new_password) =>
         api.put('/users/me/password', { current_password, new_password }),
 
+    updateProfile: (data) =>
+        api.put('/users/me', data),
+
     uploadPhoto: (formData) =>
         api.post('/users/me/photo', formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
@@ -136,6 +145,9 @@ export const usersAPI = {
 
     updatePreferences: (preferences) =>
         api.put('/users/me/preferences', { preferences }),
+
+    testEmail: () =>
+        api.post('/users/me/test-email'),
 };
 
 // ==================== ANALYTICS ====================

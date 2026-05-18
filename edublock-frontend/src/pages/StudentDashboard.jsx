@@ -5,7 +5,7 @@ import Button from '../components/Button';
 import Card from '../components/Card';
 import { generateCertificatePDF } from '../utils/pdfGenerator';
 import { openTransactionInExplorer } from '../utils/blockchain';
-import { degreesAPI, usersAPI } from '../services/api';
+import { degreesAPI, usersAPI, universitiesAPI } from '../services/api';
 
 const StudentDashboard = () => {
     const [showQRModal, setShowQRModal] = useState(false);
@@ -29,6 +29,69 @@ const StudentDashboard = () => {
     const [savingProfile, setSavingProfile] = useState(false);
     const [profileImageFile, setProfileImageFile] = useState(null);
 
+    // Claim state
+    const [showClaimModal, setShowClaimModal] = useState(false);
+    const [universities, setUniversities] = useState([]);
+    const [claimData, setClaimData] = useState({ universityId: '', degreeName: '' });
+    const [submittingClaim, setSubmittingClaim] = useState(false);
+
+    // Fetch public universities
+    useEffect(() => {
+        const fetchUnis = async () => {
+            try {
+                const res = await universitiesAPI.listPublic();
+                setUniversities(res.data);
+            } catch (err) {
+                console.error('Error fetching universities:', err);
+            }
+        };
+        fetchUnis();
+    }, []);
+
+    const handleSubmitClaim = async () => {
+        if (!claimData.universityId) {
+            showNotification('Please select a university');
+            return;
+        }
+        if (!claimData.degreeName.trim()) {
+            showNotification('Please enter a degree name');
+            return;
+        }
+        if (!user?.registration_no) {
+            showNotification('Please update your registration number in your profile first');
+            return;
+        }
+        setSubmittingClaim(true);
+        try {
+            await degreesAPI.claim({
+                university_id: parseInt(claimData.universityId),
+                degree_name: claimData.degreeName.trim(),
+            });
+            showNotification('Degree claim request submitted successfully! Pending approval.');
+            setShowClaimModal(false);
+            setClaimData({ universityId: '', degreeName: '' });
+            // Refresh certificates
+            const res = await degreesAPI.list();
+            const certs = res.data.map(cert => ({
+                id: cert.id,
+                studentName: cert.student_name,
+                courseName: cert.degree_name,
+                institution: cert.university_name || 'Unknown University',
+                grade: cert.grade || 'N/A',
+                issueDate: cert.issue_date || 'Pending Approval',
+                status: cert.status?.toLowerCase() === 'issued' ? 'Issued' : cert.status?.toLowerCase() === 'revoked' ? 'Revoked' : 'Pending',
+                hash: cert.blockchain_hash || '',
+                txHash: cert.tx_hash || '',
+                txStatus: cert.status?.toLowerCase() === 'issued' ? 'Confirmed' : 'Pending',
+            }));
+            setCertificates(certs);
+        } catch (err) {
+            showNotification(err.response?.data?.detail || 'Failed to submit degree request');
+        } finally {
+            setSubmittingClaim(false);
+        }
+    };
+
     // Get user from localStorage
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -48,7 +111,7 @@ const StudentDashboard = () => {
                     courseName: cert.degree_name,
                     institution: cert.university_name || 'Unknown University',
                     grade: cert.grade || 'N/A',
-                    issueDate: cert.issue_date,
+                    issueDate: cert.issue_date || 'Pending Approval',
                     status: cert.status?.toLowerCase() === 'issued' ? 'Issued' : cert.status?.toLowerCase() === 'revoked' ? 'Revoked' : 'Pending',
                     hash: cert.blockchain_hash || '',
                     txHash: cert.tx_hash || '',
@@ -238,21 +301,29 @@ const StudentDashboard = () => {
                                 </h1>
                                 <p className="text-white/60">View and manage your earned certificates</p>
                             </div>
-                            <Button
-                                variant="secondary"
-                                onClick={() => {
-                                    setProfileData({
-                                        name: user?.name || '',
-                                        email: user?.email || '',
-                                        currentPassword: '',
-                                        newPassword: '',
-                                        confirmPassword: '',
-                                    });
-                                    setShowProfileModal(true);
-                                }}
-                            >
-                                👤 My Profile
-                            </Button>
+                            <div className="flex gap-3">
+                                <Button
+                                    variant="primary"
+                                    onClick={() => setShowClaimModal(true)}
+                                >
+                                    🎓 Request Degree
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => {
+                                        setProfileData({
+                                            name: user?.name || '',
+                                            email: user?.email || '',
+                                            currentPassword: '',
+                                            newPassword: '',
+                                            confirmPassword: '',
+                                        });
+                                        setShowProfileModal(true);
+                                    }}
+                                >
+                                    👤 My Profile
+                                </Button>
+                            </div>
                         </div>
                     </div>
 
@@ -347,91 +418,123 @@ const StudentDashboard = () => {
                                                 <span className="text-white/60 text-sm">Issued:</span>
                                                 <span className="font-semibold">{cert.issueDate}</span>
                                             </div>
-                                            <div>
-                                                <span className="text-white/60 text-sm">Certificate Hash:</span>
-                                                <p className="font-mono text-xs text-blue-400 break-all">{cert.hash.slice(0, 20)}...{cert.hash.slice(-10)}</p>
-                                            </div>
-                                            <div className="pt-2 border-t border-white/10">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <span className="text-white/60 text-sm">Transaction Hash:</span>
-                                                    <span className={`text-xs px-2 py-0.5 rounded-full ${cert.txStatus === 'Confirmed'
-                                                        ? 'bg-green-500/20 text-green-400'
-                                                        : 'bg-yellow-500/20 text-yellow-400'
-                                                        }`}>
-                                                        {cert.txStatus}
-                                                    </span>
+                                            {cert.status !== 'Pending' ? (
+                                                <>
+                                                    <div>
+                                                        <span className="text-white/60 text-sm">Certificate Hash:</span>
+                                                        <p className="font-mono text-xs text-blue-400 break-all">{cert.hash ? `${cert.hash.slice(0, 20)}...${cert.hash.slice(-10)}` : 'N/A'}</p>
+                                                    </div>
+                                                    <div className="pt-2 border-t border-white/10">
+                                                        <div className="flex justify-between items-center mb-1">
+                                                            <span className="text-white/60 text-sm">Transaction Hash:</span>
+                                                            <span className={`text-xs px-2 py-0.5 rounded-full ${cert.txStatus === 'Confirmed'
+                                                                ? 'bg-green-500/20 text-green-400'
+                                                                : 'bg-yellow-500/20 text-yellow-400'
+                                                                }`}>
+                                                                {cert.txStatus}
+                                                            </span>
+                                                        </div>
+                                                        <p className="font-mono text-xs text-cyan-400 break-all mb-2">
+                                                            {cert.txHash ? `${cert.txHash.slice(0, 15)}...${cert.txHash.slice(-10)}` : 'N/A'}
+                                                        </p>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    navigator.clipboard.writeText(cert.txHash);
+                                                                    showNotification('Transaction hash copied!');
+                                                                }}
+                                                                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                                                            >
+                                                                📋 Copy
+                                                            </button>
+                                                            <a
+                                                                href={`https://sepolia.etherscan.io/tx/${cert.txHash}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                                                            >
+                                                                🔗 Explorer
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="pt-4 border-t border-white/10">
+                                                    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-xs text-yellow-400/90 leading-relaxed">
+                                                        ⏳ Your claim request is pending review by the university administration. Once approved, the degree will be officially recorded on the blockchain.
+                                                    </div>
                                                 </div>
-                                                <p className="font-mono text-xs text-cyan-400 break-all mb-2">
-                                                    {cert.txHash.slice(0, 15)}...{cert.txHash.slice(-10)}
-                                                </p>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => {
-                                                            navigator.clipboard.writeText(cert.txHash);
-                                                            showNotification('Transaction hash copied!');
-                                                        }}
-                                                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                                                    >
-                                                        📋 Copy
-                                                    </button>
-                                                    <a
-                                                        href={`https://sepolia.etherscan.io/tx/${cert.txHash}`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
-                                                    >
-                                                        🔗 Explorer
-                                                    </a>
-                                                </div>
-                                            </div>
+                                            )}
                                         </div>
                                     </div>
-
+ 
                                     {/* QR Code */}
-                                    <div className="mb-6 flex justify-center">
-                                        <div className="bg-white p-3 rounded-lg">
-                                            <QRCode
-                                                value={`https://edublock.com/verify/${cert.hash}`}
-                                                size={120}
-                                                level="H"
-                                            />
+                                    {cert.status !== 'Pending' ? (
+                                        <div className="mb-6 flex justify-center">
+                                            <div className="bg-white p-3 rounded-lg">
+                                                <QRCode
+                                                    value={`https://edublock.com/verify/${cert.hash}`}
+                                                    size={120}
+                                                    level="H"
+                                                />
+                                            </div>
                                         </div>
-                                    </div>
-
+                                    ) : (
+                                        <div className="mb-6 flex justify-center items-center h-[146px] border border-dashed border-white/10 rounded-xl bg-white/5">
+                                            <div className="text-center text-xs text-white/40">
+                                                <span className="text-3xl block mb-1">🔒</span>
+                                                QR Code Locked
+                                            </div>
+                                        </div>
+                                    )}
+ 
                                     <div className="space-y-3">
-                                        <Button
-                                            variant="primary"
-                                            size="sm"
-                                            className="w-full"
-                                            onClick={() => {
-                                                setSelectedCert(cert);
-                                                setShowDetailsModal(true);
-                                            }}
-                                        >
-                                            👁️ View Details
-                                        </Button>
-                                        <div className="grid grid-cols-2 gap-2">
+                                        {cert.status !== 'Pending' ? (
+                                            <>
+                                                <Button
+                                                    variant="primary"
+                                                    size="sm"
+                                                    className="w-full"
+                                                    onClick={() => {
+                                                        setSelectedCert(cert);
+                                                        setShowDetailsModal(true);
+                                                    }}
+                                                >
+                                                    👁️ View Details
+                                                </Button>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={async () => {
+                                                            await generateCertificatePDF(cert);
+                                                            showNotification('PDF downloaded successfully!');
+                                                        }}
+                                                    >
+                                                        📥 Download PDF
+                                                    </Button>
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(cert.hash);
+                                                            showNotification('Certificate hash copied!');
+                                                        }}
+                                                    >
+                                                        📋 Copy Hash
+                                                    </Button>
+                                                </div>
+                                            </>
+                                        ) : (
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() => {
-                                                    generateCertificatePDF(cert);
-                                                    showNotification('PDF downloaded successfully!');
-                                                }}
+                                                className="w-full opacity-50 cursor-not-allowed"
+                                                disabled
                                             >
-                                                📥 Download PDF
+                                                Awaiting Issuance
                                             </Button>
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(cert.hash);
-                                                    showNotification('Certificate hash copied!');
-                                                }}
-                                            >
-                                                📋 Copy Hash
-                                            </Button>
-                                        </div>
+                                        )}
                                     </div>
                                 </Card>
                             </motion.div>
@@ -871,8 +974,94 @@ const StudentDashboard = () => {
                         </Card>
                     </motion.div>
                 </div>
-            )
-            }
+            )}
+
+            {/* Request Degree Modal */}
+            {showClaimModal && (
+                <div
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                    onClick={() => setShowClaimModal(false)}
+                >
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="w-full max-w-md"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <Card className="p-4 sm:p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold">🎓 Request New Degree</h2>
+                                <button
+                                    onClick={() => setShowClaimModal(false)}
+                                    className="text-white/60 hover:text-white p-1"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-white/60 text-xs mb-2">Select Your University</label>
+                                    <select
+                                        value={claimData.universityId}
+                                        onChange={(e) => setClaimData({ ...claimData, universityId: e.target.value })}
+                                        className="input-field w-full text-sm"
+                                    >
+                                        <option value="">-- Choose University --</option>
+                                        {universities.map((uni) => (
+                                            <option key={uni.id} value={uni.id}>
+                                                {uni.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-white/60 text-xs mb-2">Degree Program Name</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. BS Software Engineering, BS Computer Science"
+                                        value={claimData.degreeName}
+                                        onChange={(e) => setClaimData({ ...claimData, degreeName: e.target.value })}
+                                        className="input-field w-full text-sm"
+                                    />
+                                    <p className="text-white/40 text-[10px] mt-1">
+                                        Note: Ensure spelling matches exactly with your official degree details.
+                                    </p>
+                                </div>
+
+                                <div className="bg-white/5 rounded-lg p-3 border border-white/10 text-xs text-white/60 leading-relaxed">
+                                    💡 <strong>Your Info:</strong> Name and Registration Number will be fetched directly from your profile: <br />
+                                    Name: <strong className="text-white">{user?.name}</strong> <br />
+                                    Reg No: <strong className="text-white">{user?.registration_no || '(Update profile first!)'}</strong>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 mt-6">
+                                <Button
+                                    variant="primary"
+                                    className="flex-1"
+                                    size="sm"
+                                    loading={submittingClaim}
+                                    disabled={submittingClaim}
+                                    onClick={handleSubmitClaim}
+                                >
+                                    Submit Request
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowClaimModal(false)}
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        </Card>
+                    </motion.div>
+                </div>
+            )}
         </div >
     );
 };

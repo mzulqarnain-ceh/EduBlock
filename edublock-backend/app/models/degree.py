@@ -16,8 +16,9 @@ class Degree(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     student_name = Column(String(255), nullable=False)
-    student_id = Column(String(100), nullable=False, index=True)
+    student_id = Column(String(100), nullable=False, index=True) # Retaining for backward compatibility (maps to registration_no)
     registration_no = Column(String(100), nullable=True)
+    student_email = Column(String(255), nullable=True)
     degree_name = Column(String(255), nullable=False)
     grade = Column(String(50), nullable=True)
     issue_date = Column(String(50), nullable=False)

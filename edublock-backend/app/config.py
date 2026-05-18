@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
+    RESEND_API_KEY: str = ""
 
     # App
     APP_NAME: str = "EduBlock"

@@ -11,11 +11,20 @@ const Settings = () => {
     const [showTemplateModal, setShowTemplateModal] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState(null);
 
+    // Profile Settings State
+    const [profileData, setProfileData] = useState({ email: '' });
+    const [savingProfile, setSavingProfile] = useState(false);
+    const [sendingTestEmail, setSendingTestEmail] = useState(false);
+
     // Get user from localStorage and fetch preferences
     React.useEffect(() => {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
-            setUser(JSON.parse(storedUser));
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
+            setProfileData({
+                email: parsedUser.email || '',
+            });
         }
         
         // Fetch preferences from API
@@ -196,8 +205,42 @@ EduBlock Team`
         }
     };
 
-    const handleTestEmail = () => {
-        showNotification('Test email sent to your inbox!', 'success');
+    const handleSaveProfile = async (e) => {
+        e.preventDefault();
+        setSavingProfile(true);
+        try {
+            const res = await usersAPI.updateProfile({
+                email: profileData.email.trim(),
+            });
+
+            // Update user in state and localStorage
+            const updatedUser = {
+                ...user,
+                email: res.data.user.email,
+            };
+            setUser(updatedUser);
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            
+            showNotification('Profile updated successfully!', 'success');
+        } catch (err) {
+            console.error('Failed to update profile:', err);
+            showNotification(err.response?.data?.detail || 'Failed to update profile.', 'error');
+        } finally {
+            setSavingProfile(false);
+        }
+    };
+
+    const handleTestEmail = async () => {
+        setSendingTestEmail(true);
+        try {
+            await usersAPI.testEmail();
+            showNotification('Test email sent to your inbox!', 'success');
+        } catch (err) {
+            console.error('Failed to send test email:', err);
+            showNotification(err.response?.data?.detail || 'Failed to send test email.', 'error');
+        } finally {
+            setSendingTestEmail(false);
+        }
     };
 
     const handlePreviewTemplate = (templateKey) => {
@@ -278,6 +321,8 @@ EduBlock Team`
                                 variant="outline"
                                 size="sm"
                                 onClick={handleTestEmail}
+                                loading={sendingTestEmail}
+                                disabled={sendingTestEmail}
                             >
                                 📧 Test Email
                             </Button>
@@ -352,17 +397,71 @@ EduBlock Team`
 
                     {/* Account Info */}
                     <Card>
-                        <h2 className="text-2xl font-bold mb-4">Account Information</h2>
-                        <div className="space-y-4">
-                            <div>
-                                <p className="text-white/60 text-sm mb-1">Email Address</p>
-                                <p className="text-lg font-semibold">{user?.email || 'user@example.com'}</p>
+                        <h2 className="text-2xl font-bold mb-6">Profile Settings</h2>
+                        <form onSubmit={handleSaveProfile} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label htmlFor="profileName" className="block text-sm font-medium mb-2 text-white/50">
+                                        Full Name (Non-Editable)
+                                    </label>
+                                    <input
+                                        id="profileName"
+                                        type="text"
+                                        value={user?.name || ''}
+                                        className="input-field w-full opacity-60 cursor-not-allowed bg-white/5"
+                                        disabled
+                                    />
+                                    <p className="text-white/30 text-xs mt-1">Name cannot be changed to preserve degree validity.</p>
+                                </div>
+                                <div>
+                                    <label htmlFor="profileRegNo" className="block text-sm font-medium mb-2 text-white/50">
+                                        Registration Number (Non-Editable)
+                                    </label>
+                                    <input
+                                        id="profileRegNo"
+                                        type="text"
+                                        value={user?.registration_no || 'N/A'}
+                                        className="input-field w-full opacity-60 cursor-not-allowed bg-white/5"
+                                        disabled
+                                    />
+                                    <p className="text-white/30 text-xs mt-1">Registration number is permanent and cannot be modified.</p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-white/60 text-sm mb-1">Account Type</p>
-                                <p className="text-lg font-semibold capitalize">{user?.role || 'Student'}</p>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-white/10">
+                                <div>
+                                    <label htmlFor="profileEmail" className="block text-sm font-medium mb-2 text-white/70">
+                                        Email Address
+                                    </label>
+                                    <input
+                                        id="profileEmail"
+                                        type="email"
+                                        value={profileData.email}
+                                        onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                                        className="input-field w-full"
+                                        required
+                                    />
+                                    <p className="text-white/40 text-xs mt-1">Update your primary communication email address.</p>
+                                </div>
+                                <div>
+                                    <p className="text-white/60 text-sm mb-2">Account Type</p>
+                                    <span className="inline-block px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30 capitalize">
+                                        👤 {user?.role || 'Student'}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
+
+                            <div className="mt-6 flex justify-end">
+                                <Button
+                                    variant="primary"
+                                    type="submit"
+                                    loading={savingProfile}
+                                    disabled={savingProfile}
+                                >
+                                    Update Profile
+                                </Button>
+                            </div>
+                        </form>
                     </Card>
                 </motion.div>
 

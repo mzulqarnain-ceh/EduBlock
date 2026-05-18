@@ -9,6 +9,7 @@ class UserResponse(BaseModel):
     name: str
     role: str
     university_id: Optional[int] = None
+    university_name: Optional[str] = None
     wallet_address: Optional[str] = None
     status: str
     profile_image: Optional[str] = None
@@ -38,3 +39,7 @@ class ChangePasswordRequest(BaseModel):
 
 class PreferencesUpdate(BaseModel):
     preferences: dict
+
+
+class UserProfileUpdate(BaseModel):
+    email: Optional[EmailStr] = None

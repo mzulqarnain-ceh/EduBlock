@@ -13,6 +13,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import Settings from './pages/Settings';
+import ResetPassword from './pages/ResetPassword';
 import NotFound from './pages/NotFound';
 import { ToastProvider } from './context/ToastContext';
 import Toast from './components/Toast';
@@ -105,6 +106,7 @@ function App() {
               <Route path="/student" element={<StudentDashboard />} />
               <Route path="/superadmin" element={<SuperAdminDashboard />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/contact" element={<ContactUs />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

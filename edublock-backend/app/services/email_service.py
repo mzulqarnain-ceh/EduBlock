@@ -20,15 +20,46 @@ def _get_smtp_connection():
         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
         return server
     except Exception as e:
-        print(f"⚠️  SMTP connection failed: {e}")
+        print(f"[SMTP Connection Failed]: {e}")
         return None
 
 
 def _send_email(to_email: str, subject: str, html_body: str):
-    """Send an email. Fails silently if SMTP not configured."""
+    """Send an email. Supports Resend API and standard SMTP."""
     settings = get_settings()
+
+    # 1. Try Resend API first if configured
+    if settings.RESEND_API_KEY:
+        try:
+            import requests
+            url = "https://api.resend.com/emails"
+            headers = {
+                "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            # Custom domain or fallback onboarding sender
+            from_email = "EduBlock <onboarding@resend.dev>"
+            if settings.SMTP_USER and "@" in settings.SMTP_USER and "gmail.com" not in settings.SMTP_USER:
+                from_email = f"EduBlock <notifications@{settings.SMTP_USER.split('@')[1]}>"
+
+            data = {
+                "from": from_email,
+                "to": to_email,
+                "subject": subject,
+                "html": html_body
+            }
+            response = requests.post(url, json=data, headers=headers)
+            if response.status_code in [200, 201, 202]:
+                print(f"[Email Sent via Resend API]: {subject} -> {to_email}")
+                return True
+            else:
+                print(f"[Resend API Error (status {response.status_code})]: {response.text}")
+        except Exception as e:
+            print(f"[Resend API Exception]: {e}")
+
+    # 2. Fallback to standard SMTP if SMTP user/password is configured
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        print(f"📧 Email skipped (SMTP not configured): {subject} → {to_email}")
+        print(f"[Email Skipped (Neither SMTP nor Resend API is configured)]: {subject} -> {to_email}")
         return False
 
     try:
@@ -42,11 +73,11 @@ def _send_email(to_email: str, subject: str, html_body: str):
         if server:
             server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
             server.quit()
-            print(f"✅ Email sent: {subject} → {to_email}")
+            print(f"[Email Sent]: {subject} -> {to_email}")
             return True
         return False
     except Exception as e:
-        print(f"⚠️  Email send failed: {e}")
+        print(f"[Email Send Failed]: {e}")
         return False
 
 
@@ -138,7 +169,7 @@ def send_forgot_password_email(email: str, name: str, reset_link: str):
     </div>
     """
     # Fallback log for local dev
-    print(f"🔗 Password Reset Link for {email}: {reset_link}")
+    print(f"[Password Reset Link for {email}]: {reset_link}")
     return _send_email(email, subject, html)
 
 
@@ -194,3 +225,32 @@ def send_university_admin_credentials_email(admin_email: str, admin_name: str, u
     </div>
     """
     return _send_email(admin_email, subject, html)
+
+
+def send_test_email(to_email: str, name: str):
+    """Send a diagnostic test email to a user."""
+    from datetime import datetime
+    subject = "Test Email - EduBlock Notification Settings"
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0f172a; color: #e2e8f0; padding: 30px; border-radius: 12px;">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #fbbf24; margin: 0;">🎓 EduBlock</h1>
+            <p style="color: #94a3b8;">Blockchain Certificate Verification System</p>
+        </div>
+        <div style="background: #1e293b; padding: 24px; border-radius: 8px; border: 1px solid #334155;">
+            <h2 style="color: #34d399; margin-top: 0;">Test Email Successful!</h2>
+            <p>Dear <strong>{name}</strong>,</p>
+            <p>This is a test email sent from your EduBlock account settings page to verify that your email notification system is working perfectly.</p>
+            <div style="background: #0f172a; padding: 16px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981; font-family: monospace; font-size: 14px; color: #34d399;">
+                Status: ACTIVE<br>
+                Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
+                Recipient: {to_email}
+            </div>
+            <p style="color: #94a3b8; font-size: 14px;">If you received this email, your notification configuration is fully functional and ready to deliver real-time certificate alerts!</p>
+        </div>
+        <p style="text-align: center; color: #64748b; font-size: 12px; margin-top: 24px;">
+            © EduBlock - Powered by Blockchain Technology
+        </p>
+    </div>
+    """
+    return _send_email(to_email, subject, html)

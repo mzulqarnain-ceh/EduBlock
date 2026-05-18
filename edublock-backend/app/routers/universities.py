@@ -57,43 +57,59 @@ def create_university(
     from app.utils.security import hash_password
     from app.services.email_service import send_university_admin_credentials_email
     
-    existing = db.query(University).filter(University.email == request.email).first()
-    if existing:
+    # 1. Check if University email already exists
+    existing_uni = db.query(University).filter(University.email == request.email).first()
+    if existing_uni:
         raise HTTPException(status_code=400, detail="University email already exists")
 
-    # 1. Create University
-    university = University(
-        name=request.name,
-        email=request.email,
-        status=UniversityStatus.ACTIVE,
-        created_by=current_user.id,
-    )
-    db.add(university)
-    db.commit()
-    db.refresh(university)
+    # 2. Check if a User already exists with this email address
+    existing_user = db.query(User).filter(User.email == request.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=400, 
+            detail="A student or admin user is already registered with this email address. Please use a unique email."
+        )
 
-    # 2. Create Default Admin User
-    admin_name = request.admin_name or f"{request.name} Admin"
-    admin_password = request.admin_password or "Admin123!"
-    
-    admin_user = User(
-        name=admin_name,
-        email=request.email,  # Same email as university
-        password_hash=hash_password(admin_password),
-        role=UserRole.ADMIN,
-        university_id=university.id,
-        status=UserStatus.ACTIVE,
-    )
-    db.add(admin_user)
-    db.commit()
+    try:
+        # 3. Create University
+        university = University(
+            name=request.name,
+            email=request.email,
+            status=UniversityStatus.ACTIVE,
+            created_by=current_user.id,
+        )
+        db.add(university)
+        db.flush() # Flush to assign university.id without committing
 
-    # 3. Send Credentials Email
-    send_university_admin_credentials_email(
-        admin_email=admin_user.email,
-        admin_name=admin_user.name,
-        university_name=university.name,
-        password=admin_password
-    )
+        # 4. Create Default Admin User
+        admin_name = request.admin_name or f"{request.name} Admin"
+        admin_password = request.admin_password or "Admin123!"
+        
+        admin_user = User(
+            name=admin_name,
+            email=request.email,  # Same email as university
+            password_hash=hash_password(admin_password),
+            role=UserRole.ADMIN,
+            university_id=university.id,
+            status=UserStatus.ACTIVE,
+        )
+        db.add(admin_user)
+        db.commit() # Commit both atomically
+        db.refresh(university)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to add university: {str(e)}")
+
+    # 5. Send Credentials Email
+    try:
+        send_university_admin_credentials_email(
+            admin_email=admin_user.email,
+            admin_name=admin_user.name,
+            university_name=university.name,
+            password=admin_password
+        )
+    except Exception as e:
+        print(f"[Email Error] Failed to send onboarding email: {e}")
 
     return {
         "id": university.id,
