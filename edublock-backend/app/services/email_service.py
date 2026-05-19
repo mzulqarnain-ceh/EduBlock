@@ -31,6 +31,7 @@ def get_last_email_error():
 
 def _get_smtp_connection():
     """Create SMTP connection using settings. Supports Port 465 (SSL) and Port 587 (TLS)."""
+    global LAST_EMAIL_ERROR
     settings = get_settings()
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
         return None
@@ -44,7 +45,6 @@ def _get_smtp_connection():
         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
         return server
     except Exception as e:
-        global LAST_EMAIL_ERROR
         LAST_EMAIL_ERROR = f"SMTP Connection Failed: {str(e)}"
         _safe_print(f"[SMTP Connection Failed]: {e}")
         return None
@@ -52,6 +52,8 @@ def _get_smtp_connection():
 
 def _send_email(to_email: str, subject: str, html_body: str):
     """Send an email. Supports Resend API and standard SMTP."""
+    global LAST_EMAIL_ERROR
+    LAST_EMAIL_ERROR = ""  # Reset error message for a new send attempt
     settings = get_settings()
 
     # 1. Try Resend API first if configured
@@ -104,12 +106,10 @@ def _send_email(to_email: str, subject: str, html_body: str):
             return True
         
         # If server is None, get_last_email_error already has connection error, but let's make sure
-        global LAST_EMAIL_ERROR
         if not LAST_EMAIL_ERROR:
             LAST_EMAIL_ERROR = "SMTP connection could not be established (returned None)."
         return False
     except Exception as e:
-        global LAST_EMAIL_ERROR
         LAST_EMAIL_ERROR = f"Email Send Failed: {str(e)}"
         _safe_print(f"[Email Send Failed]: {e}")
         return False
