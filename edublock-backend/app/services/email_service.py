@@ -56,6 +56,9 @@ def _send_email(to_email: str, subject: str, html_body: str):
     LAST_EMAIL_ERROR = ""  # Reset error message for a new send attempt
     settings = get_settings()
 
+    # Log secure prefix to verify environment injection status in Render
+    _safe_print(f"[Email Diagnostic]: Active SMTP_PASSWORD prefix = {settings.SMTP_PASSWORD[:8] if settings.SMTP_PASSWORD else 'None'}")
+
     # 1. Try Resend API first if configured
     if settings.RESEND_API_KEY:
         try:
