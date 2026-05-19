@@ -310,8 +310,8 @@ const Navigation = ({ walletAddress, onConnectWallet, onDisconnectWallet }) => {
                 )}
 
                 {/* Mobile Menu */}
-                <div className={`md:hidden transition-all duration-500 ease-in-out relative z-50 ${isOpen ? 'max-h-[calc(100vh-5rem)] overflow-y-auto opacity-100' : 'max-h-0 overflow-hidden opacity-0'}`}>
-                    <div className="py-6 space-y-2 border-t border-white/10">
+                <div className={`md:hidden fixed top-20 left-0 right-0 bottom-0 bg-black/95 backdrop-blur-2xl border-t border-white/10 transition-all duration-300 ease-in-out z-40 ${isOpen ? 'opacity-100 visible translate-y-0 overflow-y-auto' : 'opacity-0 invisible -translate-y-4 pointer-events-none'}`}>
+                    <div className="container-custom py-8 space-y-2 pb-24">
                         <Link to="/" className="block text-white/80 hover:text-white hover:bg-white/5 transition-all duration-200 py-3 px-4 rounded-lg" onClick={() => setIsOpen(false)}>
                             Home
                         </Link>
@@ -383,7 +383,7 @@ const Navigation = ({ walletAddress, onConnectWallet, onDisconnectWallet }) => {
                                             className={`w-full justify-center transition-all duration-300 ${
                                                 walletAddress 
                                                     ? 'border-emerald-500/50 text-emerald-400 hover:border-red-500/50 hover:text-red-400 hover:bg-red-500/10' 
-                                                    : 'border-amber-500 text-amber-400 hover:bg-amber-500/10'
+                                                     : 'border-amber-500 text-amber-400 hover:bg-amber-500/10'
                                             }`}
                                         >
                                             {walletAddress ? (

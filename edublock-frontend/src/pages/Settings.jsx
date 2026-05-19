@@ -312,7 +312,7 @@ EduBlock Team`
 
                     {/* Email Preferences */}
                     <Card className="mb-8">
-                        <div className="flex justify-between items-center mb-6">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                             <div>
                                 <h2 className="text-2xl font-bold mb-2">Email Notifications</h2>
                                 <p className="text-white/60 text-sm">Choose which notifications you want to receive</p>
@@ -323,6 +323,7 @@ EduBlock Team`
                                 onClick={handleTestEmail}
                                 loading={sendingTestEmail}
                                 disabled={sendingTestEmail}
+                                className="w-full sm:w-auto justify-center"
                             >
                                 📧 Test Email
                             </Button>
@@ -333,11 +334,11 @@ EduBlock Team`
                                 <div key={category.key} className="border-b border-white/10 pb-6 last:border-0">
                                     <div className="flex items-start gap-4">
                                         <div className="text-3xl">{category.icon}</div>
-                                        <div className="flex-1">
+                                        <div className="flex-1 min-w-0">
                                             <h3 className="font-semibold text-lg mb-1">{category.title}</h3>
                                             <p className="text-white/60 text-sm mb-4">{category.description}</p>
 
-                                            <div className="flex items-center gap-6">
+                                            <div className="flex flex-wrap items-center gap-4 sm:gap-6 w-full">
                                                 {/* Enable/Disable Toggle */}
                                                 <label className="flex items-center gap-3 cursor-pointer">
                                                     <div className="relative">
@@ -372,7 +373,7 @@ EduBlock Team`
                                                 {/* Preview Template Button */}
                                                 <button
                                                     onClick={() => handlePreviewTemplate(category.key)}
-                                                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors ml-auto"
+                                                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors ml-0 sm:ml-auto w-full sm:w-auto text-left mt-2 sm:mt-0 font-medium"
                                                 >
                                                     Preview Template →
                                                 </button>
