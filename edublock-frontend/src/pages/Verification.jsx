@@ -7,6 +7,44 @@ import { openTransactionInExplorer } from '../utils/blockchain';
 import { generateCertificatePDF } from '../utils/pdfGenerator';
 import { verifyAPI } from '../services/api';
 
+const extractCleanHash = (decodedText) => {
+    if (!decodedText) return '';
+    
+    // 1. Try to find a query parameter: ?hash=0x... or ?id=...
+    const hashMatch = decodedText.match(/hash=([a-fA-F0-9x]+)/i);
+    if (hashMatch) return hashMatch[1];
+    
+    const idMatch = decodedText.match(/id=(\d+)/i);
+    if (idMatch) return idMatch[1];
+    
+    // 2. If it's a URL ending with a slash and the token ID or transaction hash
+    // Example: https://edublock.com/verify/0xabc... or https://edublock.com/verify/123
+    try {
+        if (decodedText.includes('/verify/')) {
+            const parts = decodedText.split('/verify/');
+            const lastPart = parts[parts.length - 1].split('?')[0].split('#')[0];
+            if (lastPart) return lastPart.trim();
+        }
+    } catch (e) {
+        console.error("Error parsing verify path", e);
+    }
+    
+    // 3. Fallback: If it starts with http/https, parse the last path segment
+    if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
+        try {
+            const urlObj = new URL(decodedText);
+            const pathParts = urlObj.pathname.split('/');
+            const lastSegment = pathParts[pathParts.length - 1];
+            if (lastSegment) return lastSegment.trim();
+        } catch (e) {
+            const parts = decodedText.split('/');
+            return parts[parts.length - 1].trim();
+        }
+    }
+    
+    return decodedText.trim();
+};
+
 const Verification = () => {
     const [certificateId, setCertificateId] = useState('');
     const [loading, setLoading] = useState(false);
@@ -151,10 +189,7 @@ const Verification = () => {
 
             scanner.render(
                 (decodedText) => {
-                    // Extract hash from URL or use direct hash
-                    const hashMatch = decodedText.match(/hash=([a-fA-F0-9x]+)/);
-                    const extractedHash = hashMatch ? hashMatch[1] : decodedText;
-
+                    const extractedHash = extractCleanHash(decodedText);
                     setCertificateId(extractedHash);
                     handleStopScanner();
                 },
@@ -180,10 +215,7 @@ const Verification = () => {
         try {
             const html5QrCode = new Html5Qrcode("hidden-qr-reader");
             const decodedText = await html5QrCode.scanFile(file, true);
-            
-            const hashMatch = decodedText.match(/hash=([a-fA-F0-9x]+)/);
-            const extractedHash = hashMatch ? hashMatch[1] : decodedText;
-            
+            const extractedHash = extractCleanHash(decodedText);
             setCertificateId(extractedHash);
             setError('');
             html5QrCode.clear();
@@ -576,7 +608,7 @@ const Verification = () => {
                                         </div>
 
                                         {/* Scanner Container */}
-                                        <div className="relative rounded-2xl overflow-hidden bg-black/40 border border-white/5 aspect-square mb-6 group">
+                                        <div className="relative rounded-2xl bg-black/40 border border-white/5 min-h-[280px] h-auto mb-6 group">
                                             <div id="qr-reader" className="w-full h-full"></div>
                                             
                                             {/* Scanner Overlay Decoration (Visible when active) */}
@@ -589,18 +621,6 @@ const Verification = () => {
                                         </div>
 
                                         <div className="space-y-4">
-                                            <div className="bg-white/5 rounded-xl p-4 flex items-center gap-4 border border-white/5">
-                                                <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center text-blue-400">
-                                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                    </svg>
-                                                </div>
-                                                <div className="flex-1">
-                                                    <p className="text-sm text-white/80 font-medium">Auto-detection active</p>
-                                                    <p className="text-xs text-white/40">Point camera at QR code or stop to select file</p>
-                                                </div>
-                                            </div>
-
                                             <Button
                                                 variant="secondary"
                                                 className="w-full py-4 border-white/10 hover:bg-white/10"
