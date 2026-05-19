@@ -14,8 +14,7 @@ body {
 }
 
 /* Custom Select/Dropdown Styling */
-select,
-select.input-field {
+select {
   background: rgba(255, 255, 255, 0.05) !important;
   border: 1px solid rgba(255, 255, 255, 0.2) !important;
   border-radius: 0.5rem;
@@ -31,6 +30,19 @@ select.input-field {
   background-size: 1rem !important;
   transition: all 0.3s ease;
   font-size: 0.875rem;
+}
+
+select.input-field {
+  border-radius: 0.75rem !important;
+  padding-top: 0.875rem !important;
+  padding-bottom: 0.875rem !important;
+  padding-right: 2.5rem !important;
+  font-size: 1rem !important;
+  background-position: right 1rem center !important;
+}
+
+select.input-field.pl-12 {
+  padding-left: 3rem !important;
 }
 
 select:hover,

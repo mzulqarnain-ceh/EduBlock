@@ -352,7 +352,7 @@ def bulk_issue_degrees(
 
             # Overlapping major degree check (raises HTTPException which we'll catch as Exception)
             try:
-                check_overlapping_major_degrees(db, deg_data.student_name, deg_data.registration_no, deg_data.degree_name, deg_data.issue_date)
+                check_overlapping_degrees(db, deg_data.student_name, deg_data.registration_no, deg_data.issue_date, deg_data.duration_years)
             except HTTPException as he:
                 raise ValueError(he.detail)
 
@@ -364,6 +364,7 @@ def bulk_issue_degrees(
                 "grade": deg_data.grade,
                 "issue_date": deg_data.issue_date,
                 "university_id": current_user.university_id,
+                "duration_years": deg_data.duration_years,
             }
             blockchain_hash = generate_degree_hash(degree_dict)
 
@@ -399,6 +400,7 @@ def bulk_issue_degrees(
                 degree_name=deg_data.degree_name,
                 grade=deg_data.grade,
                 issue_date=deg_data.issue_date,
+                duration_years=deg_data.duration_years,
                 university_id=current_user.university_id,
                 university_name=current_user.university.name if current_user.university else None,
                 issued_by=current_user.id,

@@ -359,9 +359,9 @@ const ContactUs = () => {
                                         <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-emerald-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-amber-500/20">
                                             {info.icon}
                                         </div>
-                                        <div>
+                                        <div className="min-w-0 flex-1">
                                             <h3 className="font-bold mb-1 text-white">{info.title}</h3>
-                                            <p className="text-white/50 text-sm whitespace-pre-line">{info.content}</p>
+                                            <p className="text-white/50 text-sm whitespace-pre-line break-all sm:break-words">{info.content}</p>
                                         </div>
                                     </motion.div>
                                 ))}

@@ -930,6 +930,7 @@ const AdminDashboard = () => {
                 degree_name: row['Degree Name'] || row['degreeName'] || 'Unknown',
                 grade: row['Grade'] || row['grade'] || '',
                 issue_date: parseCSVDate(row['Issue Date'] || row['issueDate']),
+                duration_years: parseInt(row['Degree Duration'] || row['degreeDuration'] || row['Duration'] || '4', 10),
             }));
 
             // Validate bulk uploaded data
@@ -946,6 +947,11 @@ const AdminDashboard = () => {
                 const gradeErr = validateGradeOrCGPA(rawGrade);
                 const dateErr = validateIssueDate(deg.issue_date);
 
+                const duration = isNaN(deg.duration_years) ? 4 : deg.duration_years;
+                if (duration !== 2 && duration !== 4) {
+                    errorsList.push(`Row ${rowNum} Degree Duration: Must be either 2 or 4 Years.`);
+                }
+
                 if (nameErr) errorsList.push(`Row ${rowNum} Name: ${nameErr}`);
                 if (regErr) errorsList.push(`Row ${rowNum} Reg No: ${regErr}`);
                 if (emailErr) errorsList.push(`Row ${rowNum} Email: ${emailErr}`);
@@ -959,6 +965,7 @@ const AdminDashboard = () => {
                     student_name: deg.student_name.trim(),
                     degree_name: deg.degree_name.trim(),
                     grade: rawGrade,
+                    duration_years: duration,
                 };
             });
 
@@ -1005,7 +1012,7 @@ const AdminDashboard = () => {
     };
 
     const downloadSampleCSV = () => {
-        const csvContent = `Registration No,Student Email,Student Name,Degree Name,Grade,Issue Date\n2020-AG-001,john@university.edu,John Doe,BS Computer Science,A+,2025-01-15\n2020-AG-002,jane@university.edu,Jane Smith,BS Data Science,A,2025-01-14\n2020-AG-003,,Mike Johnson,BS Electrical Engineering,B+,2025-01-13`;
+        const csvContent = `Registration No,Student Email,Student Name,Degree Name,Grade,Degree Duration,Issue Date\n2020-AG-001,john@university.edu,John Doe,BS Computer Science,A+,4,2025-01-15\n2020-AG-002,jane@university.edu,Jane Smith,BS Data Science,A,4,2025-01-14\n2020-AG-003,,Mike Johnson,BS Electrical Engineering,B+,2,2025-01-13`;
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1878,7 +1885,7 @@ const AdminDashboard = () => {
                                 <div className="mt-6 p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl">
                                     <p className="text-amber-400 text-sm font-medium mb-2">📋 Required CSV Format:</p>
                                     <code className="text-white/60 text-xs block bg-black/30 p-3 rounded-lg font-mono">
-                                        Registration No, Student Email, Student Name, Degree Name, Grade, Issue Date
+                                        Registration No, Student Email, Student Name, Degree Name, Grade, Degree Duration, Issue Date
                                     </code>
                                 </div>
                             </Card>
