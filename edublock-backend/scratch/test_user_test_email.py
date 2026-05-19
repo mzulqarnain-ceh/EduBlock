@@ -1,10 +1,16 @@
-import os
-import sys
+import smtplib
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+host = "smtp-relay.brevo.com"
+port = 587
+password = "YOUR_SMTP_PASSWORD"
+user = "abb8cb001@smtp-brevo.com"
 
-from app.services.email_service import send_test_email
-
-print("Triggering test email to martysyda@gmail.com...")
-success = send_test_email("martysyda@gmail.com", "Marty")
-print("Email send result:", success)
+print(f"================ TRYING USER: {user} ================")
+try:
+    server = smtplib.SMTP(host, port, timeout=10)
+    server.starttls()
+    server.login(user, password)
+    print(f"SUCCESS with {user}!")
+    server.quit()
+except Exception as e:
+    print(f"FAILED with {user}: {e}")
