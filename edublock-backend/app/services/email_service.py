@@ -9,18 +9,34 @@ from email.mime.multipart import MIMEMultipart
 from app.config import get_settings
 
 
+def _safe_print(message: str):
+    """Print message safely, avoiding cp1252/UnicodeEncodeError on Windows terminals."""
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        try:
+            # Print with emojis replaced by characters or stripped
+            print(message.encode('ascii', errors='ignore').decode('ascii'))
+        except Exception:
+            pass
+
+
 def _get_smtp_connection():
-    """Create SMTP connection using settings."""
+    """Create SMTP connection using settings. Supports Port 465 (SSL) and Port 587 (TLS)."""
     settings = get_settings()
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
         return None
     try:
-        server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT)
-        server.starttls()
+        port = int(settings.SMTP_PORT)
+        if port == 465:
+            server = smtplib.SMTP_SSL(settings.SMTP_HOST, port, timeout=10)
+        else:
+            server = smtplib.SMTP(settings.SMTP_HOST, port, timeout=10)
+            server.starttls()
         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
         return server
     except Exception as e:
-        print(f"[SMTP Connection Failed]: {e}")
+        _safe_print(f"[SMTP Connection Failed]: {e}")
         return None
 
 
@@ -50,16 +66,16 @@ def _send_email(to_email: str, subject: str, html_body: str):
             }
             response = requests.post(url, json=data, headers=headers)
             if response.status_code in [200, 201, 202]:
-                print(f"[Email Sent via Resend API]: {subject} -> {to_email}")
+                _safe_print(f"[Email Sent via Resend API]: {subject} -> {to_email}")
                 return True
             else:
-                print(f"[Resend API Error (status {response.status_code})]: {response.text}")
+                _safe_print(f"[Resend API Error (status {response.status_code})]: {response.text}")
         except Exception as e:
-            print(f"[Resend API Exception]: {e}")
+            _safe_print(f"[Resend API Exception]: {e}")
 
     # 2. Fallback to standard SMTP if SMTP user/password is configured
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        print(f"[Email Skipped (Neither SMTP nor Resend API is configured)]: {subject} -> {to_email}")
+        _safe_print(f"[Email Skipped (Neither SMTP nor Resend API is configured)]: {subject} -> {to_email}")
         return False
 
     try:
@@ -74,11 +90,11 @@ def _send_email(to_email: str, subject: str, html_body: str):
         if server:
             server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
             server.quit()
-            print(f"[Email Sent]: {subject} -> {to_email}")
+            _safe_print(f"[Email Sent]: {subject} -> {to_email}")
             return True
         return False
     except Exception as e:
-        print(f"[Email Send Failed]: {e}")
+        _safe_print(f"[Email Send Failed]: {e}")
         return False
 
 
@@ -170,7 +186,7 @@ def send_forgot_password_email(email: str, name: str, reset_link: str):
     </div>
     """
     # Fallback log for local dev
-    print(f"[Password Reset Link for {email}]: {reset_link}")
+    _safe_print(f"[Password Reset Link for {email}]: {reset_link}")
     return _send_email(email, subject, html)
 
 
