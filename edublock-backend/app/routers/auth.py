@@ -25,6 +25,15 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
                 detail="Email already registered"
             )
 
+        # Check if registration number already exists (for students)
+        if request.registration_no:
+            existing_reg = db.query(User).filter(User.registration_no == request.registration_no).first()
+            if existing_reg:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Registration number already registered"
+                )
+
         # Validate role
         try:
             role = UserRole(request.role.upper())
