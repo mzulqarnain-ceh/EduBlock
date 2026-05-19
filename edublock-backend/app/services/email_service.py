@@ -199,6 +199,7 @@ def send_pending_admin_email(super_admin_email: str, admin_name: str, admin_emai
 
 def send_university_admin_credentials_email(admin_email: str, admin_name: str, university_name: str, password: str):
     """Send login credentials to a newly created University Admin."""
+    settings = get_settings()
     subject = f"🏛️ Welcome to EduBlock - {university_name}"
     html = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0f172a; color: #e2e8f0; padding: 30px; border-radius: 12px;">
@@ -216,7 +217,7 @@ def send_university_admin_credentials_email(admin_email: str, admin_name: str, u
             </div>
             <p style="color: #94a3b8; font-size: 14px;">We recommend changing your password after your first login.</p>
             <div style="text-align: center; margin-top: 30px;">
-                <a href="http://localhost:5173/login" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Login to Dashboard</a>
+                <a href="{settings.FRONTEND_URL.rstrip('/')}/login" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Login to Dashboard</a>
             </div>
         </div>
         <p style="text-align: center; color: #64748b; font-size: 12px; margin-top: 24px;">

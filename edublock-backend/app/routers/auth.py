@@ -9,6 +9,7 @@ from app.utils.security import (
 )
 from app.services.email_service import send_forgot_password_email, send_pending_admin_email
 from app.models.university import University
+from app.config import get_settings
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -182,8 +183,9 @@ def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db
     # For now, we'll use a signed JWT as a simple stateless reset token
     reset_token = create_access_token(data={"sub": str(user.id), "type": "reset"}, expires_delta=timedelta(minutes=60))
     
-    # Normally this would point to the frontend reset page
-    reset_link = f"http://localhost:5173/reset-password?token={reset_token}"
+    # Load frontend URL from settings dynamically
+    settings = get_settings()
+    reset_link = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={reset_token}"
     
     # Send email
     send_forgot_password_email(user.email, user.name, reset_link)
