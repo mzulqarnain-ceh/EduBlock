@@ -85,6 +85,40 @@ def _send_email(to_email: str, subject: str, html_body: str):
         except Exception as e:
             _safe_print(f"[Resend API Exception]: {e}")
 
+    # 1.5. Try Brevo HTTP API if SMTP password is a Brevo V3 API Key (starts with xkeysib-)
+    if settings.SMTP_PASSWORD and settings.SMTP_PASSWORD.startswith("xkeysib-"):
+        try:
+            import requests
+            url = "https://api.brevo.com/v3/smtp/email"
+            headers = {
+                "accept": "application/json",
+                "api-key": settings.SMTP_PASSWORD,
+                "content-type": "application/json"
+            }
+            data = {
+                "sender": {
+                    "name": "EduBlock",
+                    "email": "edublocksupport@gmail.com"
+                },
+                "to": [
+                    {
+                        "email": to_email
+                    }
+                ],
+                "subject": subject,
+                "htmlContent": html_body
+            }
+            response = requests.post(url, json=data, headers=headers)
+            if response.status_code in [200, 201, 202]:
+                _safe_print(f"[Email Sent via Brevo HTTP API]: {subject} -> {to_email}")
+                return True
+            else:
+                LAST_EMAIL_ERROR = f"Brevo HTTP API Error ({response.status_code}): {response.text}"
+                _safe_print(f"[Brevo HTTP API Error]: {response.text}")
+        except Exception as e:
+            LAST_EMAIL_ERROR = f"Brevo HTTP API Exception: {str(e)}"
+            _safe_print(f"[Brevo HTTP API Exception]: {e}")
+
     # 2. Fallback to standard SMTP if SMTP user/password is configured
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
         _safe_print(f"[Email Skipped (Neither SMTP nor Resend API is configured)]: {subject} -> {to_email}")
