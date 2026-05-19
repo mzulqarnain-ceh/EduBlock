@@ -301,17 +301,9 @@ const Navigation = ({ walletAddress, onConnectWallet, onDisconnectWallet }) => {
                     </button>
                 </div>
 
-                {/* Mobile Menu Overlay - click outside to close */}
-                {isOpen && (
-                    <div
-                        className="md:hidden fixed inset-0 top-20 z-40"
-                        onClick={() => setIsOpen(false)}
-                    />
-                )}
-
                 {/* Mobile Menu */}
-                <div className={`md:hidden fixed top-20 left-0 right-0 bottom-0 bg-black/95 backdrop-blur-2xl border-t border-white/10 transition-all duration-300 ease-in-out z-40 ${isOpen ? 'opacity-100 visible translate-y-0 overflow-y-auto' : 'opacity-0 invisible -translate-y-4 pointer-events-none'}`}>
-                    <div className="container-custom py-8 space-y-2 pb-24">
+                <div className={`md:hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-[calc(100vh-5rem)] overflow-y-auto opacity-100 py-6 border-t border-white/10' : 'max-h-0 overflow-hidden opacity-0'}`}>
+                    <div className="space-y-2 pb-12">
                         <Link to="/" className="block text-white/80 hover:text-white hover:bg-white/5 transition-all duration-200 py-3 px-4 rounded-lg" onClick={() => setIsOpen(false)}>
                             Home
                         </Link>

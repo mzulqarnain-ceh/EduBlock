@@ -812,14 +812,15 @@ const SuperAdminDashboard = () => {
 
                                 <div className="space-y-4">
                                     <div className="bg-white/5 rounded-lg p-4">
-                                        <div className="flex items-center justify-between">
-                                            <div>
+                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                            <div className="min-w-0 flex-1">
                                                 <p className="text-white/60 text-sm mb-1">Contract Address</p>
-                                                <p className="font-mono text-blue-400">{blockchainSettings.contractAddress}</p>
+                                                <p className="font-mono text-blue-400 break-all text-sm sm:text-base pr-2">{blockchainSettings.contractAddress}</p>
                                             </div>
                                             <Button
                                                 variant="secondary"
                                                 size="sm"
+                                                className="w-full sm:w-auto justify-center whitespace-nowrap"
                                                 onClick={() => {
                                                     navigator.clipboard.writeText(blockchainSettings.contractAddress);
                                                     showNotification('success', 'Contract address copied!');
