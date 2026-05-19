@@ -39,6 +39,15 @@ def fix_database():
             print(f"INFO: Note on nullifying 'issued_by': {e}")
             conn.rollback()
 
+        # 4. Add duration_years column to degrees table
+        try:
+            conn.execute(text("ALTER TABLE degrees ADD COLUMN duration_years INTEGER DEFAULT 4;"))
+            conn.commit()
+            print("SUCCESS: Column 'duration_years' added to 'degrees' table.")
+        except Exception as e:
+            print(f"INFO: Note on adding 'duration_years': {e}")
+            conn.rollback()
+
     print("\nDatabase fix completed!")
 
 if __name__ == "__main__":
