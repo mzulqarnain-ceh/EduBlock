@@ -65,7 +65,8 @@ def _send_email(to_email: str, subject: str, html_body: str):
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = f"EduBlock <{settings.SMTP_USER}>"
+        # Set the professional sender address that users will see in their inbox
+        msg["From"] = "EduBlock <edublocksupport@gmail.com>"
         msg["To"] = to_email
         msg.attach(MIMEText(html_body, "html"))
 
