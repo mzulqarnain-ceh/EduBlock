@@ -294,22 +294,24 @@ const StudentDashboard = () => {
                                 Hello, <span className="gradient-text font-semibold">{user?.name || 'Student'}!</span> 👋
                             </h2>
                         </motion.div>
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                             <div>
                                 <h1 className="text-4xl font-bold mb-2">
                                     My <span className="gradient-text">Certificates</span>
                                 </h1>
                                 <p className="text-white/60">View and manage your earned certificates</p>
                             </div>
-                            <div className="flex gap-3">
+                            <div className="flex flex-wrap sm:flex-nowrap gap-2 w-full md:w-auto mt-4 md:mt-0">
                                 <Button
                                     variant="primary"
+                                    className="flex-1 sm:flex-none justify-center whitespace-nowrap text-sm"
                                     onClick={() => setShowClaimModal(true)}
                                 >
                                     🎓 Request Degree
                                 </Button>
                                 <Button
                                     variant="secondary"
+                                    className="flex-1 sm:flex-none justify-center whitespace-nowrap text-sm"
                                     onClick={() => {
                                         setProfileData({
                                             name: user?.name || '',
@@ -625,16 +627,16 @@ const StudentDashboard = () => {
             {/* Share Modal */}
             {showShareModal && selectedCert && (
                 <div
-                    className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
                     onClick={() => setShowShareModal(false)}
                 >
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="max-w-md w-full"
+                        className="max-w-md w-full my-auto"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <Card>
+                        <Card hover={false}>
                             <div className="flex justify-between items-center mb-6">
                                 <h2 className="text-2xl font-bold">Share Certificate</h2>
                                 <button
@@ -732,16 +734,16 @@ const StudentDashboard = () => {
             {/* Certificate Details Modal */}
             {showDetailsModal && selectedCert && (
                 <div
-                    className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
                     onClick={() => setShowDetailsModal(false)}
                 >
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="max-w-2xl w-full"
+                        className="max-w-2xl w-full my-auto"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <Card>
+                        <Card hover={false}>
                             <div className="flex justify-between items-start mb-6">
                                 <div>
                                     <h2 className="text-2xl font-bold mb-1">{selectedCert.courseName}</h2>
@@ -847,16 +849,16 @@ const StudentDashboard = () => {
             {/* Profile Modal */}
             {showProfileModal && (
                 <div
-                    className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
                     onClick={() => setShowProfileModal(false)}
                 >
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="w-full max-w-md"
+                        className="w-full max-w-md my-auto"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <Card className="p-4 sm:p-6">
+                        <Card className="p-4 sm:p-6" hover={false}>
                             <div className="flex justify-between items-center mb-4">
                                 <h2 className="text-xl font-bold">👤 My Profile</h2>
                                 <button
@@ -979,16 +981,16 @@ const StudentDashboard = () => {
             {/* Request Degree Modal */}
             {showClaimModal && (
                 <div
-                    className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
                     onClick={() => setShowClaimModal(false)}
                 >
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="w-full max-w-md"
+                        className="w-full max-w-md my-auto"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <Card className="p-4 sm:p-6">
+                        <Card className="p-4 sm:p-6" hover={false}>
                             <div className="flex justify-between items-center mb-6">
                                 <h2 className="text-2xl font-bold">🎓 Request New Degree</h2>
                                 <button
