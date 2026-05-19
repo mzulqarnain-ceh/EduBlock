@@ -128,6 +128,11 @@ def issue_degree(
     # Look up student user for proper linking (check registration_no first, then email)
     student_user = _lookup_student_user(db, request.registration_no, request.student_email)
     student_user_id = student_user.id if student_user else None
+    
+    # Auto-link student user to this university if not already linked
+    if student_user and student_user.university_id is None:
+        student_user.university_id = current_user.university_id
+        db.add(student_user)
 
     # Overlapping degree check
     check_overlapping_degrees(db, request.student_name, request.registration_no, request.issue_date, request.duration_years)
@@ -349,6 +354,11 @@ def bulk_issue_degrees(
         try:
             # Look up student for proper linking
             student_user = _lookup_student_user(db, deg_data.registration_no, deg_data.student_email)
+            
+            # Auto-link student user to this university if not already linked
+            if student_user and student_user.university_id is None:
+                student_user.university_id = current_user.university_id
+                db.add(student_user)
 
             # Overlapping major degree check (raises HTTPException which we'll catch as Exception)
             try:
