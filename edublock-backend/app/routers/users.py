@@ -235,7 +235,12 @@ def trigger_test_email(
     
     success = send_test_email(current_user.email, current_user.name)
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to send test email. Please check SMTP / Resend API settings.")
+        from app.services.email_service import get_last_email_error
+        err_msg = get_last_email_error() or "Unknown email configuration error."
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to send test email. Error details: {err_msg}"
+        )
         
     return {"message": "Test email sent successfully!"}
 

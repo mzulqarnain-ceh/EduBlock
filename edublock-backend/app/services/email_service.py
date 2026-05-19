@@ -21,6 +21,14 @@ def _safe_print(message: str):
             pass
 
 
+LAST_EMAIL_ERROR = ""
+
+
+def get_last_email_error():
+    global LAST_EMAIL_ERROR
+    return LAST_EMAIL_ERROR
+
+
 def _get_smtp_connection():
     """Create SMTP connection using settings. Supports Port 465 (SSL) and Port 587 (TLS)."""
     settings = get_settings()
@@ -36,6 +44,8 @@ def _get_smtp_connection():
         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
         return server
     except Exception as e:
+        global LAST_EMAIL_ERROR
+        LAST_EMAIL_ERROR = f"SMTP Connection Failed: {str(e)}"
         _safe_print(f"[SMTP Connection Failed]: {e}")
         return None
 
@@ -92,8 +102,15 @@ def _send_email(to_email: str, subject: str, html_body: str):
             server.quit()
             _safe_print(f"[Email Sent]: {subject} -> {to_email}")
             return True
+        
+        # If server is None, get_last_email_error already has connection error, but let's make sure
+        global LAST_EMAIL_ERROR
+        if not LAST_EMAIL_ERROR:
+            LAST_EMAIL_ERROR = "SMTP connection could not be established (returned None)."
         return False
     except Exception as e:
+        global LAST_EMAIL_ERROR
+        LAST_EMAIL_ERROR = f"Email Send Failed: {str(e)}"
         _safe_print(f"[Email Send Failed]: {e}")
         return False
 
