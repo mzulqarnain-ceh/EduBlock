@@ -28,10 +28,31 @@ def list_universities(
 
     result = []
     for uni in universities:
-        student_count = db.query(User).filter(
+        # Get unique registration numbers and emails from degrees
+        degree_records = db.query(Degree.registration_no, Degree.student_email).filter(
+            Degree.university_id == uni.id
+        ).all()
+        
+        unique_students = set()
+        for reg, email in degree_records:
+            if reg:
+                unique_students.add(reg.strip().lower())
+            elif email:
+                unique_students.add(email.strip().lower())
+                
+        # Get unique registration numbers and emails from registered student users
+        user_records = db.query(User.registration_no, User.email).filter(
             User.university_id == uni.id,
             User.role == UserRole.STUDENT
-        ).count()
+        ).all()
+        
+        for reg, email in user_records:
+            if reg:
+                unique_students.add(reg.strip().lower())
+            elif email:
+                unique_students.add(email.strip().lower())
+                
+        student_count = len(unique_students)
 
         result.append({
             "id": uni.id,
