@@ -21,6 +21,17 @@ const Navigation = ({ walletAddress, onConnectWallet, onDisconnectWallet }) => {
     }, [location]);
 
     useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [isOpen]);
+
+    useEffect(() => {
         const handleScroll = () => {
             setScrolled(window.scrollY > 20);
 
@@ -94,6 +105,7 @@ const Navigation = ({ walletAddress, onConnectWallet, onDisconnectWallet }) => {
         localStorage.removeItem('user');
         setUser(null);
         setShowUserMenu(false);
+        setIsOpen(false);
         if (onDisconnectWallet) {
             onDisconnectWallet();
         }
@@ -298,7 +310,7 @@ const Navigation = ({ walletAddress, onConnectWallet, onDisconnectWallet }) => {
                 )}
 
                 {/* Mobile Menu */}
-                <div className={`md:hidden overflow-hidden transition-all duration-500 ease-in-out relative z-50 ${isOpen ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0'}`}>
+                <div className={`md:hidden transition-all duration-500 ease-in-out relative z-50 ${isOpen ? 'max-h-[calc(100vh-5rem)] overflow-y-auto opacity-100' : 'max-h-0 overflow-hidden opacity-0'}`}>
                     <div className="py-6 space-y-2 border-t border-white/10">
                         <Link to="/" className="block text-white/80 hover:text-white hover:bg-white/5 transition-all duration-200 py-3 px-4 rounded-lg" onClick={() => setIsOpen(false)}>
                             Home
