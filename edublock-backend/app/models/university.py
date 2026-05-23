@@ -1,5 +1,8 @@
+# pyrefly: ignore [missing-import]
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum as SQLEnum
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import relationship
+# pyrefly: ignore [missing-import]
 from sqlalchemy.sql import func
 import enum
 from app.database import Base
@@ -14,7 +17,7 @@ class University(Base):
     __tablename__ = "universities"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), nullable=False)
+    name = Column(String(255), unique=True, nullable=False)
     email = Column(String(255), unique=True, nullable=False)
     status = Column(SQLEnum(UniversityStatus), nullable=False, default=UniversityStatus.ACTIVE)
     contract_address = Column(String(255), nullable=True)

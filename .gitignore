@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.pyc
 venv/
@@ -13,3 +13,9 @@ contracts/compiled/
 # OS
 .DS_Store
 Thumbs.db
+
+# Scratch and Temporary files
+scratch/
+edublock-backend/scratch/
+*.msi
+*.db

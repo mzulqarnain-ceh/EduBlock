@@ -1,5 +1,8 @@
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, status
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
+# pyrefly: ignore [missing-import]
 from sqlalchemy import func
 from app.database import get_db
 from app.models.user import User, UserRole
@@ -83,6 +86,11 @@ def create_university(
     if existing_uni:
         raise HTTPException(status_code=400, detail="University email already exists")
 
+    # 1b. Check if University name already exists (Case-insensitive check)
+    existing_uni_name = db.query(University).filter(func.lower(University.name) == func.lower(request.name)).first()
+    if existing_uni_name:
+        raise HTTPException(status_code=400, detail="University name already exists")
+
     # 2. Check if a User already exists with this email address
     existing_user = db.query(User).filter(User.email == request.email).first()
     if existing_user:
@@ -154,6 +162,13 @@ def update_university(
         raise HTTPException(status_code=404, detail="University not found")
 
     if request.name is not None:
+        # Check if another university already has this name
+        existing_uni_name = db.query(University).filter(
+            func.lower(University.name) == func.lower(request.name),
+            University.id != uni_id
+        ).first()
+        if existing_uni_name:
+            raise HTTPException(status_code=400, detail="University name already exists")
         university.name = request.name
     if request.email is not None:
         university.email = request.email
