@@ -46,8 +46,32 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
         # Handle Admin Registration vs Student Registration
         initial_status = UserStatus.ACTIVE
+        university_id = request.university_id
+
         if role == UserRole.ADMIN:
             initial_status = UserStatus.PENDING
+            if not university_id and request.university_name:
+                from sqlalchemy import func
+                from app.models.university import UniversityStatus
+                existing_uni = db.query(University).filter(
+                    func.lower(University.name) == func.lower(request.university_name.strip())
+                ).first()
+                if existing_uni:
+                    university_id = existing_uni.id
+                else:
+                    new_uni = University(
+                        name=request.university_name.strip(),
+                        email=request.email,
+                        status=UniversityStatus.INACTIVE,
+                    )
+                    db.add(new_uni)
+                    db.flush()
+                    university_id = new_uni.id
+            elif not university_id and not request.university_name:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="University name or ID is required for administrator registration."
+                )
 
         # Create user
         user = User(
@@ -56,7 +80,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
             password_hash=hash_password(request.password),
             name=request.name,
             role=role,
-            university_id=request.university_id,
+            university_id=university_id,
             status=initial_status,
         )
         db.add(user)

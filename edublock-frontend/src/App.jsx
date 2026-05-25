@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navigation from './components/Navigation';
 import ScrollToTop from './components/ScrollToTop';
@@ -15,9 +15,45 @@ import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import Settings from './pages/Settings';
 import ResetPassword from './pages/ResetPassword';
 import NotFound from './pages/NotFound';
-import { ToastProvider } from './context/ToastContext';
+import { ToastProvider, useToast } from './context/ToastContext';
 import Toast from './components/Toast';
 import ProtectedRoute from './components/ProtectedRoute';
+import { universitiesAPI } from './services/api';
+
+function ColdStartHandler() {
+  const { showToast, removeToast } = useToast();
+  const activeToastRef = useRef(null);
+
+  useEffect(() => {
+    const handleLongRequest = () => {
+      if (!activeToastRef.current) {
+        const toastId = showToast(
+          "Connecting to EduBlock network... The backend node is waking up from standby (cold start). This may take up to 30 seconds.",
+          "info",
+          15000
+        );
+        activeToastRef.current = toastId;
+      }
+    };
+
+    const handleLongRequestFinished = () => {
+      if (activeToastRef.current) {
+        removeToast(activeToastRef.current);
+        activeToastRef.current = null;
+      }
+    };
+
+    window.addEventListener('apiLongRequest', handleLongRequest);
+    window.addEventListener('apiLongRequestFinished', handleLongRequestFinished);
+
+    return () => {
+      window.removeEventListener('apiLongRequest', handleLongRequest);
+      window.removeEventListener('apiLongRequestFinished', handleLongRequestFinished);
+    };
+  }, [showToast, removeToast]);
+
+  return null;
+}
 
 function App() {
   const [walletAddress, setWalletAddress] = useState('');
@@ -82,9 +118,22 @@ function App() {
     checkConnection();
   }, []);
 
+  useEffect(() => {
+    // Background warm-up ping to wake up sleeping backend and database
+    const warmUpBackend = async () => {
+      try {
+        await universitiesAPI.listPublic();
+      } catch (err) {
+        console.warn("Warm-up ping failed (expected if backend starting up):", err);
+      }
+    };
+    warmUpBackend();
+  }, []);
+
   return (
     <Router>
       <ToastProvider>
+        <ColdStartHandler />
         <div className="min-h-screen relative">
           {/* Scroll to top on route change */}
           <ScrollToTop />

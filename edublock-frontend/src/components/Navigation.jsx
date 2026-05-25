@@ -14,10 +14,24 @@ const Navigation = ({ walletAddress, onConnectWallet, onDisconnectWallet }) => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-            setUser(JSON.parse(storedUser));
-        }
+        const handleProfileUpdate = () => {
+            const storedUser = localStorage.getItem('user');
+            if (storedUser) {
+                setUser(JSON.parse(storedUser));
+            } else {
+                setUser(null);
+            }
+        };
+
+        // Listen for profile changes
+        window.addEventListener('userProfileUpdated', handleProfileUpdate);
+        
+        // Initial load
+        handleProfileUpdate();
+
+        return () => {
+            window.removeEventListener('userProfileUpdated', handleProfileUpdate);
+        };
     }, [location]);
 
     useEffect(() => {
@@ -104,6 +118,7 @@ const Navigation = ({ walletAddress, onConnectWallet, onDisconnectWallet }) => {
     const handleLogout = () => {
         localStorage.removeItem('user');
         setUser(null);
+        window.dispatchEvent(new Event('userProfileUpdated'));
         setShowUserMenu(false);
         setIsOpen(false);
         if (onDisconnectWallet) {

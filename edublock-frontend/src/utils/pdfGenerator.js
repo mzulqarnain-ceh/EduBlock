@@ -1,11 +1,13 @@
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
+import html2canvas from 'html2canvas';
 
 /**
  * Generate and Download PDF Certificate
- * Creates a highly professional, modern, and minimalist corporate certificate PDF.
- * Strips out the redundant plain-text localhost URL (the QR code alone acts as the verification scanner).
- * 
+ * Creates a highly professional pure-CSS certificate with NO background image.
+ * Navy border, gold corners, circular emblem, calligraphic student name,
+ * QR code card, metadata card, signature + seal, blockchain footer.
+ *
  * @param {Object} certificateData - Certificate details
  * @returns {Promise<void>} - Triggers PDF download
  */
@@ -27,266 +29,433 @@ export const generateCertificatePDF = async (certificateData) => {
     } = certificateData;
 
     try {
-        // Create new A4 Landscape PDF
-        const doc = new jsPDF({
-            orientation: 'landscape',
-            unit: 'mm',
-            format: 'a4'
+        // Generate QR code Data-URL first
+        const verifyUrl = hash
+            ? `${window.location.origin}/verify?hash=${hash}`
+            : `${window.location.origin}/verify`;
+        const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
+            margin: 0,
+            width: 150,
+            color: {
+                dark: '#0f172a',
+                light: '#ffffff',
+            },
         });
 
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight();
-
-        // 1. Pristine Pure White Background
-        doc.setFillColor(255, 255, 255);
-        doc.rect(0, 0, pageWidth, pageHeight, 'F');
-
-        // 2. High-End Top Header Ribbon (Solid Charcoal & Metallic Gold)
-        doc.setFillColor(15, 23, 42); // Charcoal Slate 900
-        doc.rect(0, 0, pageWidth, 6, 'F');
-        
-        doc.setFillColor(212, 175, 55); // Golden rod Accent
-        doc.rect(0, 6, pageWidth, 1.5, 'F');
-
-        // 3. Elegant Circular University Seal Emblem (Top Center)
-        const sealX = pageWidth / 2;
-        const sealY = 24;
-        
-        // Outer golden circle ring
-        doc.setDrawColor(212, 175, 55); // Gold
-        doc.setLineWidth(0.6);
-        doc.circle(sealX, sealY, 10, 'D');
-
-        // Inner solid royal blue fill
-        doc.setFillColor(37, 99, 235); // Royal Blue
-        doc.circle(sealX, sealY, 8.8, 'F');
-        
-        // Text inside the top badge
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(5.5);
-        doc.setFont('helvetica', 'bold');
-        doc.text('EDUBLOCK', sealX, sealY - 1.2, { align: 'center' });
-        doc.text('AUTHENTIC', sealX, sealY + 1.6, { align: 'center' });
-        
-        doc.setTextColor(212, 175, 55);
-        doc.setFontSize(4.5);
-        doc.text('SECURED', sealX, sealY + 4.8, { align: 'center' });
-
-        const crestY = 22; // Kept as anchor for text Y spacing
-
-        // Helper to capitalize words perfectly into Title Case
-        const formatTitleCase = (str) => {
-            if (!str) return '';
-            return str
-                .toLowerCase()
-                .split(' ')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(' ');
-        };
-
-        // 4. Institution Header (Letter-Spaced Corporate Styling - Darker Slate 700 for high visibility)
-        const cleanInstitution = institution.toUpperCase();
-        const spacedInstitution = cleanInstitution.split('').join(' ');
-        doc.setFontSize(10.5);
-        doc.setTextColor(51, 65, 85); // Slate 700
-        doc.setFont('helvetica', 'bold');
-        doc.text(spacedInstitution, pageWidth / 2, crestY + 20, { align: 'center' });
-
-        // 5. Main Certificate Title
-        doc.setFontSize(26);
-        doc.setTextColor(15, 23, 42);
-        doc.setFont('helvetica', 'bold');
-        doc.text('CERTIFICATE OF COMPLETION', pageWidth / 2, crestY + 34, { align: 'center' });
-
-        // 6. Presentation Line (Darker Slate 500 for enhanced visibility)
-        doc.setFontSize(10);
-        doc.setTextColor(100, 116, 139); // Slate 500
-        doc.setFont('helvetica', 'normal');
-        doc.text('THIS IS PROUDLY PRESENTED TO', pageWidth / 2, crestY + 42, { align: 'center' });
-
-        // 7. Capitalized Student Name
-        const cleanStudentName = formatTitleCase(studentName);
-        doc.setFontSize(24);
-        doc.setTextColor(31, 41, 55); // Rich Slate 800
-        doc.setFont('helvetica', 'bold');
-        doc.text(cleanStudentName, pageWidth / 2, crestY + 54, { align: 'center' });
-
-        // Thin Calligraphy Gold Separator Line
-        doc.setDrawColor(212, 175, 55);
-        doc.setLineWidth(0.5);
-        doc.line(pageWidth / 2 - 40, crestY + 58, pageWidth / 2 + 40, crestY + 58);
-
-        // 8. Course Description (Darker Slate 500 for high contrast/visibility)
-        doc.setFontSize(10);
-        doc.setTextColor(100, 116, 139); // Slate 500
-        doc.setFont('helvetica', 'normal');
-        doc.text('FOR SUCCESSFUL COMPLETION OF ALL SPECIFIED REQUIREMENTS FOR THE DEGREE OF', pageWidth / 2, crestY + 66, { align: 'center' });
-
-        const cleanCourseName = formatTitleCase(courseName);
-        doc.setFontSize(17);
-        doc.setTextColor(15, 23, 42);
-        doc.setFont('helvetica', 'bold');
-        doc.text(cleanCourseName, pageWidth / 2, crestY + 76, { align: 'center' });
-
-        // 9. Completion Grade Details (Darker Slate 700 for visibility)
         let formattedDate = issueDate;
         try {
             formattedDate = new Date(issueDate).toLocaleDateString('en-US', {
                 year: 'numeric',
                 month: 'long',
-                day: 'numeric'
+                day: 'numeric',
             });
         } catch (e) {
             // Keep default
         }
-        doc.setFontSize(10);
-        doc.setTextColor(51, 65, 85); // Slate 700
-        doc.text(`Completed with an overall grade of ${grade} on ${formattedDate}`, pageWidth / 2, crestY + 84, { align: 'center' });
 
-        // 10. Split Footer Panel (QR Code Column | Credential Metadata Center | VC Signature Column)
-        const panelY = 124;
-
-        // --- LEFT COLUMN: QR Code (Only QR code with clean border, NO raw localhost URL string) ---
-        const qrX = 35;
-        const verifyUrl = hash ? `${window.location.origin}/verify?hash=${hash}` : `${window.location.origin}/verify`;
-        let qrDataUrl = '';
-        try {
-            qrDataUrl = await QRCode.toDataURL(verifyUrl, {
-                margin: 0,
-                width: 150,
-                color: {
-                    dark: '#0f172a',
-                    light: '#ffffff'
-                }
-            });
-
-            // Draw QR Code
-            doc.addImage(qrDataUrl, 'PNG', qrX, panelY, 28, 28);
-
-            // Clean Slate Outer Border around QR Code
-            doc.setDrawColor(226, 232, 240);
-            doc.setLineWidth(0.4);
-            doc.rect(qrX - 2, panelY - 2, 32, 32);
-
-            // Label under QR Code (No long URL - Darker Slate 500 for legibility)
-            doc.setFontSize(7.5);
-            doc.setTextColor(100, 116, 139); // Slate 500
-            doc.setFont('helvetica', 'bold');
-            doc.text('VERIFY CREDENTIAL', qrX + 14, panelY + 36, { align: 'center' });
-
-        } catch (qrErr) {
-            console.error('Failed to render QR Code inside PDF:', qrErr);
-        }
-
-        // --- CENTER COLUMN: Academic & Blockchain Records (Centered column layout) ---
-        const metaX = pageWidth / 2;
-        doc.setFontSize(9.5);
-        doc.setTextColor(15, 23, 42); // Slate 900
-        doc.setFont('helvetica', 'bold');
-        doc.text('CREDENTIAL METADATA', metaX, panelY + 3, { align: 'center' });
-
-        // Divider
-        doc.setDrawColor(226, 232, 240);
-        doc.setLineWidth(0.4);
-        doc.line(metaX - 35, panelY + 6, metaX + 35, panelY + 6);
-
-        // Data fields
-        doc.setFontSize(8.5);
-        
-        // Grade
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(71, 85, 105); // Slate 600
-        doc.text('Grade Achieved:', metaX - 30, panelY + 11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        doc.text(grade, metaX + 30, panelY + 11, { align: 'right' });
-
-        // Date
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(71, 85, 105);
-        doc.text('Date of Issue:', metaX - 30, panelY + 16);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        doc.text(formattedDate, metaX + 30, panelY + 16, { align: 'right' });
-
-        // Status
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(71, 85, 105);
-        doc.text('Status:', metaX - 30, panelY + 21);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(34, 197, 94); // Green status
-        doc.text(status.toUpperCase(), metaX + 30, panelY + 21, { align: 'right' });
-
-        // --- RIGHT COLUMN: Vice Chancellor Calligraphy Signature ---
-        const sigX = pageWidth - 65;
-        
-        // Cursive authority signature in dark charcoal ink
-        doc.setFont('times', 'italic');
-        doc.setFontSize(16);
-        doc.setTextColor(15, 23, 42);
-        doc.text('Dr. Harrison Tech', sigX + 15, panelY + 14, { align: 'center' });
-
-        // Signature separator line
-        doc.setDrawColor(226, 232, 240);
-        doc.setLineWidth(0.4);
-        doc.line(sigX - 10, panelY + 20, sigX + 40, panelY + 20);
-
-        // Signatory Title and Details (Darker Slate 500 for labels)
-        doc.setTextColor(15, 23, 42);
-        doc.setFontSize(8.5);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Vice Chancellor', sigX + 15, panelY + 25, { align: 'center' });
-        
-        doc.setTextColor(100, 116, 139); // Slate 500
-        doc.setFontSize(7.5);
-        doc.setFont('helvetica', 'normal');
-        doc.text('Authorized Signatory', sigX + 15, panelY + 29, { align: 'center' });
-
-        // 11. Minimalist Blockchain Hash Footer (Darker Slate 600/500 for enhanced visibility)
-        const footerY = 186;
-        
-        doc.setFont('courier', 'normal');
-        doc.setFontSize(7.5);
-        doc.setTextColor(71, 85, 105); // Slate 600
-        const displayHash = hash ? (hash.length > 40 ? `${hash.slice(0, 20)}...${hash.slice(-20)}` : hash) : 'N/A';
-        doc.text(`BLOCKCHAIN RECORD HASH: ${displayHash}`, pageWidth / 2, footerY, { align: 'center' });
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        doc.setTextColor(100, 116, 139); // Slate 500
-        doc.text('This registry certificate is cryptographically secured on the decentralized blockchain.', pageWidth / 2, footerY + 5, { align: 'center' });
-        doc.text('EDUBLOCK VERIFICATION NETWORK', pageWidth / 2, footerY + 9, { align: 'center' });
-
-        // 12. Safe File Name for Download
-        const cleanFilename = (str) => {
+        const formatTitleCase = (str) => {
+            if (!str) return '';
             return str
+                .toLowerCase()
+                .split(' ')
+                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ');
+        };
+
+        // Letter-space each word, separate words with wider gap
+        const spacedInstitution = institution.toUpperCase().split(' ').map(w => w.split('').join('\u2005')).join('\u2003\u2003');
+        const cleanStudentName = formatTitleCase(studentName);
+        const cleanCourseName = formatTitleCase(courseName);
+        const displayHash = hash
+            ? hash.length > 40
+                ? `${hash.slice(0, 20)}...${hash.slice(-20)}`
+                : hash
+            : 'N/A';
+
+        // ── Off-screen container ──────────────────────────────────────────────────
+        const container = document.createElement('div');
+        container.style.cssText = [
+            'position:absolute',
+            'left:-9999px',
+            'top:-9999px',
+            'width:1123px',
+            'height:794px',
+            'background-color:#f8f7f2',
+        ].join(';');
+
+        // ── Pure CSS / HTML certificate ───────────────────────────────────────────
+        container.innerHTML = `
+<div style="
+    position:relative;
+    width:1123px;
+    height:794px;
+    box-sizing:border-box;
+    background-color:#f8f7f2;
+    overflow:hidden;
+    font-family:Arial,sans-serif;
+    color:#0f172a;
+    border:14px solid #0f2d66;
+">
+
+    <!-- Gold inner outline -->
+    <div style="
+        position:absolute;top:8px;left:8px;right:8px;bottom:8px;
+        border:2px solid #d4af37;
+        pointer-events:none;z-index:10;
+    "></div>
+
+    <!-- Watermark circle -->
+    <div style="
+        position:absolute;top:50%;left:50%;
+        transform:translate(-50%,-50%);
+        width:400px;height:400px;border-radius:50%;
+        background:radial-gradient(circle,rgba(212,175,55,0.07) 0%,transparent 70%);
+        border:2px solid rgba(212,175,55,0.09);
+        z-index:0;pointer-events:none;
+    "></div>
+
+    <!-- Corner TL -->
+    <div style="position:absolute;top:16px;left:16px;z-index:11;pointer-events:none;">
+        <div style="position:absolute;top:0;left:0;width:90px;height:3px;background:#d4af37;"></div>
+        <div style="position:absolute;top:0;left:0;width:3px;height:90px;background:#d4af37;"></div>
+        <div style="position:absolute;top:12px;left:12px;width:60px;height:1.5px;background:#d4af37;opacity:.5;"></div>
+        <div style="position:absolute;top:12px;left:12px;width:1.5px;height:60px;background:#d4af37;opacity:.5;"></div>
+    </div>
+    <!-- Corner TR -->
+    <div style="position:absolute;top:16px;right:16px;z-index:11;pointer-events:none;">
+        <div style="position:absolute;top:0;right:0;width:90px;height:3px;background:#d4af37;"></div>
+        <div style="position:absolute;top:0;right:0;width:3px;height:90px;background:#d4af37;"></div>
+        <div style="position:absolute;top:12px;right:12px;width:60px;height:1.5px;background:#d4af37;opacity:.5;"></div>
+        <div style="position:absolute;top:12px;right:12px;width:1.5px;height:60px;background:#d4af37;opacity:.5;"></div>
+    </div>
+    <!-- Corner BL -->
+    <div style="position:absolute;bottom:16px;left:16px;z-index:11;pointer-events:none;">
+        <div style="position:absolute;bottom:0;left:0;width:90px;height:3px;background:#d4af37;"></div>
+        <div style="position:absolute;bottom:0;left:0;width:3px;height:90px;background:#d4af37;"></div>
+        <div style="position:absolute;bottom:12px;left:12px;width:60px;height:1.5px;background:#d4af37;opacity:.5;"></div>
+        <div style="position:absolute;bottom:12px;left:12px;width:1.5px;height:60px;background:#d4af37;opacity:.5;"></div>
+    </div>
+    <!-- Corner BR -->
+    <div style="position:absolute;bottom:16px;right:16px;z-index:11;pointer-events:none;">
+        <div style="position:absolute;bottom:0;right:0;width:90px;height:3px;background:#d4af37;"></div>
+        <div style="position:absolute;bottom:0;right:0;width:3px;height:90px;background:#d4af37;"></div>
+        <div style="position:absolute;bottom:12px;right:12px;width:60px;height:1.5px;background:#d4af37;opacity:.5;"></div>
+        <div style="position:absolute;bottom:12px;right:12px;width:1.5px;height:60px;background:#d4af37;opacity:.5;"></div>
+    </div>
+
+    <!-- ═══════════ MAIN CONTENT ═══════════ -->
+    <div style="
+        position:relative;z-index:5;
+        padding:28px 70px 16px;
+        height:100%;box-sizing:border-box;
+        display:flex;flex-direction:column;align-items:center;
+    ">
+
+        <!-- TOP EMBLEM ROW -->
+        <div style="display:flex;align-items:center;gap:0;margin-bottom:6px;width:600px;">
+            <div style="flex:1;height:1.5px;background:linear-gradient(to right,transparent,#d4af37);"></div>
+            <div style="width:10px;height:10px;background:#d4af37;transform:rotate(45deg);margin:0 10px;flex-shrink:0;"></div>
+            <!-- Circular navy emblem -->
+            <div style="
+                width:76px;height:76px;border-radius:50%;
+                background:#0f2d66;border:3px solid #d4af37;
+                display:flex;align-items:center;justify-content:center;
+                box-shadow:0 4px 18px rgba(15,45,102,.45);
+                flex-shrink:0;
+            ">
+                <div style="text-align:center;color:#fff;font-size:8.5px;font-weight:bold;line-height:1.6;letter-spacing:.5px;font-family:Arial,sans-serif;">
+                    EDUBLOCK<br>&#9733; AUTHENTIC &#9733;<br>SECURED
+                </div>
+            </div>
+            <div style="width:10px;height:10px;background:#d4af37;transform:rotate(45deg);margin:0 10px;flex-shrink:0;"></div>
+            <div style="flex:1;height:1.5px;background:linear-gradient(to left,transparent,#d4af37);"></div>
+        </div>
+
+        <!-- Three dots below emblem -->
+        <div style="display:flex;gap:5px;margin-bottom:8px;">
+            <div style="width:4px;height:4px;border-radius:50%;background:#d4af37;"></div>
+            <div style="width:4px;height:4px;border-radius:50%;background:#d4af37;opacity:.5;"></div>
+            <div style="width:4px;height:4px;border-radius:50%;background:#d4af37;"></div>
+        </div>
+
+        <!-- UNIVERSITY NAME -->
+        <div style="
+            font-size:12.5px;font-weight:bold;
+            letter-spacing:7px;color:#0f2d66;
+            text-transform:uppercase;margin-bottom:8px;
+            font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+            text-align:center;
+        ">${spacedInstitution}</div>
+
+        <!-- CERTIFICATE TITLE -->
+        <div style="
+            font-size:40px;font-weight:bold;color:#0f2d66;
+            font-family:Georgia,'Times New Roman',Times,serif;
+            letter-spacing:2px;line-height:1.1;margin-bottom:8px;
+            text-align:center;
+        ">CERTIFICATE OF COMPLETION</div>
+
+        <!-- Gold separator -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;width:400px;">
+            <div style="flex:1;height:1px;background:linear-gradient(to right,transparent,#d4af37);"></div>
+            <div style="font-size:15px;color:#d4af37;">&#10022;</div>
+            <div style="width:22px;height:1.5px;background:#d4af37;"></div>
+            <div style="font-size:15px;color:#d4af37;">&#10022;</div>
+            <div style="flex:1;height:1px;background:linear-gradient(to left,transparent,#d4af37);"></div>
+        </div>
+
+        <!-- PRESENTATION LINE -->
+        <div style="
+            font-size:11px;letter-spacing:3.5px;
+            color:#475569;text-transform:uppercase;
+            margin-bottom:6px;text-align:center;
+            font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+        ">THIS IS PROUDLY PRESENTED TO</div>
+
+        <!-- STUDENT NAME -->
+        <div style="
+            font-size:54px;font-style:italic;font-weight:bold;
+            color:#0f2d66;
+            font-family:Georgia,'Times New Roman',serif;
+            line-height:1.15;margin-bottom:10px;
+            text-align:center;letter-spacing:1px;
+        ">${cleanStudentName}</div>
+
+        <!-- Gold underline under name -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;width:360px;">
+            <div style="flex:1;height:1.5px;background:linear-gradient(to right,transparent,#d4af37);"></div>
+            <div style="width:6px;height:6px;background:#d4af37;transform:rotate(45deg);"></div>
+            <div style="flex:1;height:1.5px;background:linear-gradient(to left,transparent,#d4af37);"></div>
+        </div>
+
+        <!-- COMPLETION TEXT -->
+        <div style="
+            font-size:10.5px;color:#64748b;
+            text-transform:uppercase;letter-spacing:1.5px;
+            margin-bottom:4px;text-align:center;
+            font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+        ">FOR SUCCESSFUL COMPLETION OF ALL SPECIFIED REQUIREMENTS FOR THE DEGREE OF</div>
+
+        <!-- DEGREE NAME -->
+        <div style="
+            font-size:26px;font-weight:bold;color:#0f172a;
+            font-family:Georgia,'Times New Roman',Times,serif;
+            margin-bottom:6px;text-align:center;
+        ">${cleanCourseName}</div>
+
+        <!-- Dot trio -->
+        <div style="display:flex;gap:7px;margin-bottom:6px;">
+            <div style="width:5px;height:5px;border-radius:50%;background:#d4af37;"></div>
+            <div style="width:5px;height:5px;border-radius:50%;background:#d4af37;opacity:.5;"></div>
+            <div style="width:5px;height:5px;border-radius:50%;background:#d4af37;"></div>
+        </div>
+
+        <!-- GRADE & DATE -->
+        <div style="
+            font-size:13.5px;color:#475569;
+            font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+            margin-bottom:14px;text-align:center;
+        ">
+            Completed with an overall grade of
+            <strong style="color:#0f172a;font-weight:700;">${grade}</strong>
+            on
+            <strong style="color:#0f172a;font-weight:700;">${formattedDate}</strong>
+        </div>
+
+        <!-- ───── BOTTOM 3-COLUMN ───── -->
+        <div style="
+            display:flex;justify-content:space-between;
+            align-items:flex-start;width:100%;gap:14px;
+            margin-top:auto;
+        ">
+
+            <!-- LEFT: QR Code card -->
+            <div style="
+                padding:12px 10px;
+                border:2px solid #d4af37;
+                border-radius:12px;
+                text-align:center;
+                background:#fff;
+                box-shadow:0 4px 12px rgba(0,0,0,.08);
+                min-width:130px;
+                display:flex;
+                flex-direction:column;
+                align-items:center;
+                justify-content:center;
+                gap:10px;
+            ">
+                <img src="${qrDataUrl}" style="width:92px;height:92px;display:block;" />
+                <div style="
+                    background:#0f2d66;color:#fff;
+                    padding:6px 14px;
+                    border-radius:20px;
+                    font-size:8.5px;font-weight:bold;
+                    letter-spacing:.8px;
+                    font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+                    white-space:nowrap;
+                ">VERIFY CREDENTIAL</div>
+            </div>
+
+            <!-- CENTER: Metadata card -->
+            <div style="
+                flex:1;padding:14px 20px;
+                background:rgba(255,255,255,.92);
+                border-radius:12px;border:1.5px solid #e2e8f0;
+                box-shadow:0 4px 12px rgba(0,0,0,.06);
+            ">
+                <div style="
+                    text-align:center;font-weight:bold;font-size:10px;
+                    color:#0f2d66;letter-spacing:2px;margin-bottom:10px;
+                    border-bottom:1px solid #e2e8f0;padding-bottom:7px;
+                    font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+                ">CREDENTIAL METADATA</div>
+                <table style="width:100%;font-size:12px;border-collapse:collapse;color:#475569;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                    <tr>
+                        <td style="padding:4px 0;">&#127891; Grade Achieved:</td>
+                        <td style="text-align:right;font-weight:700;color:#0f172a;padding:4px 0;">${grade}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;">&#128197; Date of Issue:</td>
+                        <td style="text-align:right;font-weight:700;color:#0f172a;padding:4px 0;">${formattedDate}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;">&#9989; Status:</td>
+                        <td style="text-align:right;font-weight:700;color:#16a34a;padding:4px 0;">${status.toUpperCase()}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- RIGHT: Signature + Seal -->
+            <div style="
+                text-align:center;
+                min-width:190px;
+                display:flex;
+                flex-direction:column;
+                align-items:center;
+                justify-content:center;
+            ">
+                <!-- Cursive signature text -->
+                <div style="
+                    font-size:28px;font-style:italic;font-weight:600;
+                    color:#0f2d66;
+                    font-family:Georgia,'Times New Roman',serif;
+                    line-height:1.3;
+                    padding-bottom:6px;
+                    border-bottom:2px solid #475569;
+                    width:100%;
+                    text-align:center;
+                    margin-bottom:6px;
+                ">Dr. Harrison Tech</div>
+                <div style="font-weight:bold;font-size:13px;color:#0f172a;margin-bottom:2px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Vice Chancellor</div>
+                <div style="font-size:10px;color:#64748b;margin-bottom:12px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Authorized Signatory</div>
+                <!-- Seal circle - pure CSS -->
+                <div style="
+                    width:72px;height:72px;border-radius:50%;
+                    border:3px solid #0f2d66;
+                    outline:1.5px solid #d4af37;
+                    outline-offset:-7px;
+                    display:flex;flex-direction:column;
+                    align-items:center;justify-content:center;
+                    background:rgba(15,45,102,.04);
+                ">
+                    <div style="margin-bottom:2px;">
+                        <div style="width:28px;height:3px;background:#0f2d66;margin:0 auto;"></div>
+                        <div style="display:flex;gap:3px;margin:2px auto;width:24px;justify-content:center;">
+                            <div style="width:4px;height:11px;background:#0f2d66;"></div>
+                            <div style="width:4px;height:11px;background:#0f2d66;"></div>
+                            <div style="width:4px;height:11px;background:#0f2d66;"></div>
+                        </div>
+                        <div style="width:28px;height:2px;background:#0f2d66;margin:0 auto;"></div>
+                    </div>
+                    <div style="font-size:6px;font-weight:bold;color:#0f2d66;letter-spacing:.5px;text-align:center;line-height:1.3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;">
+                        OFFICIAL<br>SEAL
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- FOOTER: Blockchain hash -->
+        <div style="
+            margin-top:10px;text-align:center;
+            border-top:1px solid rgba(212,175,55,.35);
+            padding-top:7px;width:100%;
+        ">
+            <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:4px;">
+                <div style="font-size:12px;color:#d4af37;">&#10148;</div>
+                <div style="
+                    font-size:10px;font-weight:bold;color:#64748b;
+                    font-family:'Courier New',Courier,monospace;letter-spacing:.4px;
+                ">BLOCKCHAIN RECORD HASH: ${displayHash}</div>
+                <div style="font-size:12px;color:#d4af37;">&#10148;</div>
+            </div>
+            <div style="font-size:9px;color:#94a3b8;margin-bottom:3px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                This registry certificate is cryptographically secured on the decentralized blockchain.
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
+                <div style="font-size:9px;color:#d4af37;">&#9670;</div>
+                <div style="font-size:10px;font-weight:bold;color:#0f2d66;letter-spacing:2px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">EDUBLOCK VERIFICATION NETWORK</div>
+                <div style="font-size:9px;color:#d4af37;">&#9670;</div>
+            </div>
+        </div>
+
+    </div>
+</div>
+        `;
+
+        document.body.appendChild(container);
+
+        // Wait for QR code image to paint
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        // html2canvas at 3× for crisp PDF output
+        const canvas = await html2canvas(container, {
+            scale: 3,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#f8f7f2',
+        });
+
+        document.body.removeChild(container);
+
+        const imgData = canvas.toDataURL('image/png', 1.0);
+
+        const doc = new jsPDF({
+            orientation: 'landscape',
+            unit: 'mm',
+            format: 'a4',
+        });
+
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+
+        doc.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
+
+        const cleanFilename = (str) =>
+            str
                 .replace(/[^a-zA-Z0-9\s]/g, '')
                 .replace(/\s+/g, '_')
                 .substring(0, 30);
-        };
 
         const safeStudentName = cleanFilename(studentName) || 'Student';
         const safeCourseName = cleanFilename(cleanCourseName) || 'Certificate';
         const fileName = `${safeStudentName}_${safeCourseName}_Certificate.pdf`;
 
-        // Trigger Download
         doc.save(fileName);
-        console.log(`Corporate Minimalist PDF successfully downloaded: ${fileName}`);
-
+        console.log(`Certificate PDF downloaded: ${fileName}`);
     } catch (error) {
-        console.error('Error generating corporate PDF:', error);
-        alert('Failed to generate professional PDF. Please try again.');
+        console.error('Error generating certificate PDF:', error);
+        alert('Failed to generate PDF. Please try again.');
     }
 };
 
 /**
- * Simple PDF download with minimal data
- * Fallback for quick downloads
+ * Simple PDF download with minimal data — fallback
  */
 export const downloadSimplePDF = (studentName, courseName) => {
     generateCertificatePDF({
         studentName: studentName || 'Student',
-        courseName: courseName || 'Certificate'
+        courseName: courseName || 'Certificate',
     });
 };
 

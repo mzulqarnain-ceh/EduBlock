@@ -220,6 +220,7 @@ EduBlock Team`
             };
             setUser(updatedUser);
             localStorage.setItem('user', JSON.stringify(updatedUser));
+            window.dispatchEvent(new Event('userProfileUpdated'));
             
             showNotification('Profile updated successfully!', 'success');
         } catch (err) {

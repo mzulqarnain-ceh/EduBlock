@@ -71,6 +71,7 @@ const Login = ({ onLogin }) => {
             // Store token and user data
             localStorage.setItem('token', access_token);
             localStorage.setItem('user', JSON.stringify(user));
+            window.dispatchEvent(new Event('userProfileUpdated'));
 
             if (onLogin) onLogin(user);
 

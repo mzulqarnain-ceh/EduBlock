@@ -12,19 +12,39 @@ const api = axios.create({
     },
 });
 
-// Automatically attach JWT token to every request
+// Automatically attach JWT token to every request and track slow requests (cold starts)
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Set a timer to detect slow requests (potential cold start)
+    const timer = setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('apiLongRequest', { detail: { url: config.url } }));
+    }, 1500);
+    
+    config.metadata = { timer };
     return config;
 });
 
 // Handle response errors globally
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        // Clear slow request timer
+        if (response.config?.metadata?.timer) {
+            clearTimeout(response.config.metadata.timer);
+        }
+        window.dispatchEvent(new CustomEvent('apiLongRequestFinished'));
+        return response;
+    },
     (error) => {
+        // Clear slow request timer on error too
+        if (error.config?.metadata?.timer) {
+            clearTimeout(error.config.metadata.timer);
+        }
+        window.dispatchEvent(new CustomEvent('apiLongRequestFinished'));
+
         // Only clear auth data if we get 401 specifically from an auth-protected endpoint
         // Don't redirect - let the page handle the error gracefully
         if (error.response?.status === 401) {

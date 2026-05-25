@@ -15,26 +15,13 @@ const Signup = () => {
         confirmPassword: '',
         role: 'student',
         registrationNo: '',
-        universityId: '',
+        universityName: '',
     });
-    const [universities, setUniversities] = useState([]);
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const navigate = useNavigate();
     const toast = useToast();
-
-    useEffect(() => {
-        const fetchUniversities = async () => {
-            try {
-                const res = await universitiesAPI.listPublic();
-                setUniversities(res.data);
-            } catch (err) {
-                console.error("Failed to load universities:", err);
-            }
-        };
-        fetchUniversities();
-    }, []);
 
     // Password strength calculator
     const getPasswordStrength = (password) => {
@@ -99,17 +86,25 @@ const Signup = () => {
         }
 
         // 4. University Validation (if Admin)
-        if (formData.role === 'admin' && !formData.universityId) {
-            toast.error('Please select your university.');
-            return;
+        let trimmedUniName = '';
+        if (formData.role === 'admin') {
+            trimmedUniName = formData.universityName.trim();
+            if (!trimmedUniName) {
+                toast.error('Please enter your university name.');
+                return;
+            }
+            if (trimmedUniName.length < 2 || trimmedUniName.length > 100) {
+                toast.error('University name must be between 2 and 100 characters.');
+                return;
+            }
         }
 
-        // 5. Malicious Injections checking (Name & Registration number)
+        // 5. Malicious Injections checking (Name, Registration number, and University Name)
         const blacklistedKeywords = [
             'select', 'union', 'insert', 'update', 'delete', 'drop', 'alter', 
             'truncate', 'exec', '--', '/*', '*/', 'xp_cmdshell'
         ];
-        const inputsToScan = [trimmedName.toLowerCase(), trimmedRegNo.toLowerCase()];
+        const inputsToScan = [trimmedName.toLowerCase(), trimmedRegNo.toLowerCase(), trimmedUniName.toLowerCase()];
         if (inputsToScan.some(input => blacklistedKeywords.some(keyword => input.includes(keyword)))) {
             toast.error('Potentially unsafe characters or database keywords detected.');
             return;
@@ -137,7 +132,7 @@ const Signup = () => {
                 password: formData.password,
                 role: formData.role,
                 registration_no: formData.role === 'student' ? formData.registrationNo : null,
-                university_id: formData.universityId ? parseInt(formData.universityId) : null,
+                university_name: formData.role === 'admin' ? formData.universityName.trim() : null,
             });
 
             setLoading(false);
@@ -289,24 +284,21 @@ const Signup = () => {
                                 exit={{ opacity: 0, height: 0 }}
                                 transition={{ duration: 0.3 }}
                             >
-                                <label htmlFor="universityId" className="block text-sm font-medium mb-2 text-white/70">
-                                    Select University
+                                <label htmlFor="universityName" className="block text-sm font-medium mb-2 text-white/70">
+                                    University Name
                                 </label>
                                 <div className="relative">
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 z-10">🏛️</span>
-                                    <select
-                                        id="universityId"
-                                        name="universityId"
-                                        value={formData.universityId}
+                                    <input
+                                        id="universityName"
+                                        name="universityName"
+                                        type="text"
+                                        value={formData.universityName}
                                         onChange={handleChange}
+                                        placeholder="Enter your university name"
                                         className="input-field pl-12"
                                         required
-                                    >
-                                        <option value="">Select your institution</option>
-                                        {universities.map(uni => (
-                                            <option key={uni.id} value={uni.id}>{uni.name}</option>
-                                        ))}
-                                    </select>
+                                    />
                                 </div>
                             </motion.div>
                         )}

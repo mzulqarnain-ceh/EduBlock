@@ -368,3 +368,53 @@ def send_contact_form_email(sender_name: str, sender_email: str, email_subject: 
     """
     return _send_email(support_email, subject, html)
 
+
+def send_admin_approved_email(admin_email: str, admin_name: str, university_name: str):
+    """Notify Admin that their account and university request has been approved."""
+    subject = "✅ Account Approved - EduBlock"
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0f172a; color: #e2e8f0; padding: 30px; border-radius: 12px;">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #fbbf24; margin: 0;">🎓 EduBlock</h1>
+            <p style="color: #94a3b8;">Blockchain Certificate Verification System</p>
+        </div>
+        <div style="background: #1e293b; padding: 24px; border-radius: 8px; border: 1px solid #10b981;">
+            <h2 style="color: #34d399; margin-top: 0;">Congratulations! Your Account Has Been Approved</h2>
+            <p>Dear <strong>{admin_name}</strong>,</p>
+            <p>We are pleased to inform you that your registration request as the administrator for <strong>{university_name}</strong> has been approved by the Super Admin.</p>
+            <p>Your university is now fully active, and you can begin issuing secure blockchain certificates.</p>
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="{get_settings().FRONTEND_URL.rstrip('/')}/login" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Login to Admin Dashboard</a>
+            </div>
+        </div>
+        <p style="text-align: center; color: #64748b; font-size: 12px; margin-top: 24px;">
+            © EduBlock - Powered by Blockchain Technology
+        </p>
+    </div>
+    """
+    return _send_email(admin_email, subject, html)
+
+
+def send_admin_rejected_email(admin_email: str, admin_name: str, university_name: str):
+    """Notify Admin that their account and university request has been declined."""
+    subject = "❌ Account Request Declined - EduBlock"
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0f172a; color: #e2e8f0; padding: 30px; border-radius: 12px;">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #fbbf24; margin: 0;">🎓 EduBlock</h1>
+            <p style="color: #94a3b8;">Blockchain Certificate Verification System</p>
+        </div>
+        <div style="background: #1e293b; padding: 24px; border-radius: 8px; border: 1px solid #ef4444;">
+            <h2 style="color: #f87171; margin-top: 0;">Registration Request Declined</h2>
+            <p>Dear <strong>{admin_name}</strong>,</p>
+            <p>Thank you for your interest in registering <strong>{university_name}</strong> with EduBlock.</p>
+            <p>Unfortunately, your administrator registration request has been declined by the Super Admin at this time.</p>
+            <p style="color: #94a3b8; font-size: 14px;">If you believe this is an error or would like to provide more verification details, please contact our support at edublocksupport@gmail.com.</p>
+        </div>
+        <p style="text-align: center; color: #64748b; font-size: 12px; margin-top: 24px;">
+            © EduBlock - Powered by Blockchain Technology
+        </p>
+    </div>
+    """
+    return _send_email(admin_email, subject, html)
+

@@ -79,7 +79,19 @@ def update_user_status(
         raise HTTPException(status_code=404, detail="User not found")
 
     try:
-        user.status = UserStatus(request.status.upper())
+        new_status = UserStatus(request.status.upper())
+        user.status = new_status
+        if new_status == UserStatus.ACTIVE and user.role == UserRole.ADMIN and user.university_id:
+            from app.models.university import UniversityStatus
+            from app.services.email_service import send_admin_approved_email
+            uni = user.university
+            if uni:
+                if uni.status == UniversityStatus.INACTIVE:
+                    uni.status = UniversityStatus.ACTIVE
+                try:
+                    send_admin_approved_email(user.email, user.name, uni.name)
+                except Exception as e:
+                    print(f"Failed to send admin approved email: {e}")
     except ValueError:
         raise HTTPException(
             status_code=400,
@@ -100,6 +112,20 @@ def delete_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # If the user is an ADMIN, send a rejection email and clean up their pending university if INACTIVE
+    if user.role == UserRole.ADMIN and user.university_id:
+        from app.models.university import University, UniversityStatus
+        from app.services.email_service import send_admin_rejected_email
+        uni = db.query(University).filter(University.id == user.university_id).first()
+        if uni:
+            try:
+                send_admin_rejected_email(user.email, user.name, uni.name)
+            except Exception as e:
+                print(f"Failed to send admin rejected email: {e}")
+            
+            if uni.status == UniversityStatus.INACTIVE:
+                db.delete(uni)
 
     # 1. Nullify audit log references
     from app.models.audit_log import AuditLog

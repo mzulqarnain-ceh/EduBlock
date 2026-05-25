@@ -16,6 +16,8 @@ const SuperAdminDashboard = () => {
     const [universityToDelete, setUniversityToDelete] = useState(null);
     const [showUserDeleteModal, setShowUserDeleteModal] = useState(false);
     const [userToDelete, setUserToDelete] = useState(null);
+    const [showUserDetailModal, setShowUserDetailModal] = useState(false);
+    const [selectedUserForDetail, setSelectedUserForDetail] = useState(null);
     const [searchParams] = useSearchParams();
     const validTabs = ['universities', 'users', 'settings', 'analytics'];
     const initialTab = validTabs.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'universities';
@@ -74,58 +76,62 @@ const SuperAdminDashboard = () => {
         }
     };
 
+    const fetchData = async () => {
+        try {
+            const [uniRes, usersRes, statsRes] = await Promise.all([
+                universitiesAPI.list(),
+                usersAPI.list(),
+                analyticsAPI.getDashboard(),
+            ]);
+
+            // Map universities
+            setUniversities(uniRes.data.map(u => ({
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                status: u.status?.toLowerCase() === 'active' ? 'Active' : 'Inactive',
+                students: u.students || 0,
+            })));
+
+            // Map users
+            setUsers(usersRes.data.map(u => ({
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                role: u.role,
+                universityName: u.university_name || '',
+                registrationNo: u.registration_no || '',
+                status: u.status?.toLowerCase() === 'active' ? 'Active' : 
+                        u.status?.toLowerCase() === 'suspended' ? 'Suspended' : 
+                        u.status?.toLowerCase() === 'pending' ? 'Pending' : 'Inactive',
+                lastLogin: formatDateTime(u.last_login),
+                createdAt: formatDateTime(u.created_at),
+                walletAddress: u.wallet_address || 'Not Connected',
+                selected: false,
+            })));
+
+            // Set analytics
+            const s = statsRes.data;
+            setAnalytics({
+                totalCertificates: s.total_certificates || 0,
+                thisMonth: s.monthly_issued?.length > 0 ? s.monthly_issued[s.monthly_issued.length - 1].count : 0,
+                verifications: 0,
+                activeUsers: s.total_users || 0,
+                totalIssued: s.total_issued || 0,
+                totalPending: s.total_pending || 0,
+                totalRevoked: s.total_revoked || 0,
+                monthly_issued: s.monthly_issued || [],
+                university_issued: s.university_issued || [],
+                recent_activity: s.recent_activity || []
+            });
+
+        } catch (err) {
+            console.error('Error fetching SuperAdmin data:', err);
+        }
+    };
+
     // Fetch all data from backend
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [uniRes, usersRes, statsRes] = await Promise.all([
-                    universitiesAPI.list(),
-                    usersAPI.list(),
-                    analyticsAPI.getDashboard(),
-                ]);
-
-                // Map universities
-                setUniversities(uniRes.data.map(u => ({
-                    id: u.id,
-                    name: u.name,
-                    email: u.email,
-                    status: u.status?.toLowerCase() === 'active' ? 'Active' : 'Inactive',
-                    students: u.students || 0,
-                })));
-
-                // Map users
-                setUsers(usersRes.data.map(u => ({
-                    id: u.id,
-                    name: u.name,
-                    email: u.email,
-                    role: u.role,
-                    universityName: u.university_name || '',
-                    status: u.status?.toLowerCase() === 'active' ? 'Active' : 
-                            u.status?.toLowerCase() === 'suspended' ? 'Suspended' : 
-                            u.status?.toLowerCase() === 'pending' ? 'Pending' : 'Inactive',
-                    lastLogin: formatDateTime(u.last_login),
-                    selected: false,
-                })));
-
-                // Set analytics
-                const s = statsRes.data;
-                setAnalytics({
-                    totalCertificates: s.total_certificates || 0,
-                    thisMonth: s.monthly_issued?.length > 0 ? s.monthly_issued[s.monthly_issued.length - 1].count : 0,
-                    verifications: 0,
-                    activeUsers: s.total_users || 0,
-                    totalIssued: s.total_issued || 0,
-                    totalPending: s.total_pending || 0,
-                    totalRevoked: s.total_revoked || 0,
-                    monthly_issued: s.monthly_issued || [],
-                    university_issued: s.university_issued || [],
-                    recent_activity: s.recent_activity || []
-                });
-
-            } catch (err) {
-                console.error('Error fetching SuperAdmin data:', err);
-            }
-        };
         fetchData();
     }, []);
 
@@ -345,6 +351,7 @@ const SuperAdminDashboard = () => {
             showNotification('success', `${userToDelete.name} has been deleted.`);
             setShowUserDeleteModal(false);
             setUserToDelete(null);
+            fetchData();
         } catch (err) {
             showNotification('error', err.response?.data?.detail || 'Failed to delete user');
         }
@@ -359,6 +366,7 @@ const SuperAdminDashboard = () => {
                 u.id === user.id ? { ...u, status: displayStatus } : u
             ));
             showNotification('success', `${user.name} status updated to ${displayStatus}.`);
+            fetchData();
         } catch (err) {
             showNotification('error', err.response?.data?.detail || 'Failed to update user status.');
         }
@@ -678,6 +686,16 @@ const SuperAdminDashboard = () => {
                                                     <td className="py-4 px-4 text-white/60 text-sm">{user.lastLogin}</td>
                                                     <td className="py-4 px-4">
                                                         <div className="flex gap-2 justify-center flex-wrap">
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                onClick={() => {
+                                                                    setSelectedUserForDetail(user);
+                                                                    setShowUserDetailModal(true);
+                                                                }}
+                                                            >
+                                                                👁 Details
+                                                            </Button>
                                                             {user.status !== 'Active' && (
                                                                 <Button
                                                                     variant="outline"
@@ -689,6 +707,7 @@ const SuperAdminDashboard = () => {
                                                                                 u.id === user.id ? { ...u, status: 'Active' } : u
                                                                             ));
                                                                             showNotification('success', `${user.name} is now Active.`);
+                                                                            fetchData();
                                                                         } catch (err) {
                                                                             showNotification('error', err.response?.data?.detail || 'Failed to update status');
                                                                         }
@@ -709,6 +728,7 @@ const SuperAdminDashboard = () => {
                                                                                 u.id === user.id ? { ...u, status: 'Inactive' } : u
                                                                             ));
                                                                             showNotification('success', `${user.name} is now Inactive.`);
+                                                                            fetchData();
                                                                         } catch (err) {
                                                                             showNotification('error', err.response?.data?.detail || 'Failed to update status');
                                                                         }
@@ -729,6 +749,7 @@ const SuperAdminDashboard = () => {
                                                                                 u.id === user.id ? { ...u, status: 'Suspended' } : u
                                                                             ));
                                                                             showNotification('success', `${user.name} has been suspended.`);
+                                                                            fetchData();
                                                                         } catch (err) {
                                                                             showNotification('error', err.response?.data?.detail || 'Failed to suspend');
                                                                         }
@@ -1346,6 +1367,107 @@ const SuperAdminDashboard = () => {
                                                 Delete User
                                             </Button>
                                         </div>
+                                    </div>
+                                </Card>
+                            </motion.div>
+                        </div>
+                    )}
+
+                     {/* User Details Modal */}
+                    {showUserDetailModal && selectedUserForDetail && (
+                        <div
+                            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                            onClick={() => setShowUserDetailModal(false)}
+                        >
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className="max-w-lg w-full"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <Card className="border-white/10">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h2 className="text-2xl font-bold flex items-center gap-2">
+                                            <span>👤</span> User Details
+                                        </h2>
+                                        <button
+                                            onClick={() => setShowUserDetailModal(false)}
+                                            className="text-white/60 hover:text-white"
+                                        >
+                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center pb-3 border-b border-white/5">
+                                            <span className="text-white/50 text-sm">Account Status</span>
+                                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                selectedUserForDetail.status === 'Active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                                                selectedUserForDetail.status === 'Pending' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                                                selectedUserForDetail.status === 'Inactive' ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30' :
+                                                'bg-red-500/20 text-red-400 border border-red-500/30'
+                                            }`}>
+                                                {selectedUserForDetail.status}
+                                            </span>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-1 py-1">
+                                            <span className="text-white/50 text-sm col-span-1">Full Name</span>
+                                            <span className="text-white font-semibold col-span-2">{selectedUserForDetail.name}</span>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-1 py-1">
+                                            <span className="text-white/50 text-sm col-span-1">Email</span>
+                                            <span className="text-white/80 font-mono text-sm col-span-2 break-all">{selectedUserForDetail.email}</span>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-1 py-1">
+                                            <span className="text-white/50 text-sm col-span-1">Role</span>
+                                            <span className="text-white/80 col-span-2 font-semibold">
+                                                {selectedUserForDetail.role?.toUpperCase() === 'ADMIN' ? '🏛️ Institute Admin' : '🎓 Student'}
+                                            </span>
+                                        </div>
+
+                                        {selectedUserForDetail.role?.toUpperCase() === 'ADMIN' && selectedUserForDetail.universityName && (
+                                            <div className="grid grid-cols-3 gap-1 py-1">
+                                                <span className="text-white/50 text-sm col-span-1">University</span>
+                                                <span className="text-cyan-400 font-semibold col-span-2">{selectedUserForDetail.universityName}</span>
+                                            </div>
+                                        )}
+
+                                        {selectedUserForDetail.role?.toUpperCase() === 'STUDENT' && selectedUserForDetail.registrationNo && (
+                                            <div className="grid grid-cols-3 gap-1 py-1">
+                                                <span className="text-white/50 text-sm col-span-1">Reg No</span>
+                                                <span className="text-amber-400 font-semibold col-span-2">{selectedUserForDetail.registrationNo}</span>
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-3 gap-1 py-1">
+                                            <span className="text-white/50 text-sm col-span-1">Wallet</span>
+                                            <span className="text-white/60 font-mono text-xs col-span-2 break-all">{selectedUserForDetail.walletAddress}</span>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-1 py-1">
+                                            <span className="text-white/50 text-sm col-span-1">Registered</span>
+                                            <span className="text-white/60 text-sm col-span-2">{selectedUserForDetail.createdAt || 'N/A'}</span>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-1 py-1">
+                                            <span className="text-white/50 text-sm col-span-1">Last Login</span>
+                                            <span className="text-white/60 text-sm col-span-2">{selectedUserForDetail.lastLogin || 'Never'}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-6 border-t border-white/5 mt-6 flex gap-3">
+                                        <Button
+                                            variant="secondary"
+                                            onClick={() => setShowUserDetailModal(false)}
+                                            className="w-full justify-center"
+                                        >
+                                            Close
+                                        </Button>
                                     </div>
                                 </Card>
                             </motion.div>

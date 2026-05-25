@@ -228,6 +228,7 @@ const StudentDashboard = () => {
             const updatedUser = { ...user, profile_image: newProfileImage };
             localStorage.setItem('user', JSON.stringify(updatedUser));
             setUser(updatedUser);
+            window.dispatchEvent(new Event('userProfileUpdated'));
 
             // Clear password fields on success
             setProfileData(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));

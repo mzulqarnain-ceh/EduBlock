@@ -15,6 +15,7 @@ class RegisterRequest(BaseModel):
     password: str
     role: str = "student"
     university_id: Optional[int] = None
+    university_name: Optional[str] = None
 
 
 class ForgotPasswordRequest(BaseModel):

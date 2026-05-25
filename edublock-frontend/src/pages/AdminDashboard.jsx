@@ -355,40 +355,41 @@ const AdminDashboard = () => {
     const [approvingClaim, setApprovingClaim] = useState(false);
     const [approveErrors, setApproveErrors] = useState({});
 
+    const fetchData = async (showLoading = true) => {
+        if (showLoading) setDataLoading(true);
+        try {
+            const [certsRes, statsRes] = await Promise.all([
+                degreesAPI.list(),
+                analyticsAPI.getDashboard(),
+            ]);
+
+            // Map backend data to frontend format
+            const certs = certsRes.data.map(cert => ({
+                id: cert.id,
+                studentName: cert.student_name,
+                studentId: cert.student_id,
+                studentEmail: cert.student_email || '',
+                degreeName: cert.degree_name,
+                grade: cert.grade || '',
+                issueDate: cert.issue_date || '',
+                status: cert.status?.toLowerCase() === 'issued' ? 'Issued' : cert.status?.toLowerCase() === 'revoked' ? 'Revoked' : 'Pending',
+                hash: cert.blockchain_hash || '',
+                txHash: cert.tx_hash || '',
+                revokeReason: cert.revoke_reason || '',
+            }));
+
+            setIssuedCertificates(certs);
+            setStats(statsRes.data);
+        } catch (err) {
+            console.error('Error fetching dashboard data:', err);
+            showNotification('error', 'Failed to load dashboard data. Please refresh.');
+        } finally {
+            if (showLoading) setDataLoading(false);
+        }
+    };
+
     // Fetch certificates and stats from backend on mount
     useEffect(() => {
-        const fetchData = async () => {
-            setDataLoading(true);
-            try {
-                const [certsRes, statsRes] = await Promise.all([
-                    degreesAPI.list(),
-                    analyticsAPI.getDashboard(),
-                ]);
-
-                // Map backend data to frontend format
-                const certs = certsRes.data.map(cert => ({
-                    id: cert.id,
-                    studentName: cert.student_name,
-                    studentId: cert.student_id,
-                    studentEmail: cert.student_email || '',
-                    degreeName: cert.degree_name,
-                    grade: cert.grade || '',
-                    issueDate: cert.issue_date || '',
-                    status: cert.status?.toLowerCase() === 'issued' ? 'Issued' : cert.status?.toLowerCase() === 'revoked' ? 'Revoked' : 'Pending',
-                    hash: cert.blockchain_hash || '',
-                    txHash: cert.tx_hash || '',
-                    revokeReason: cert.revoke_reason || '',
-                }));
-
-                setIssuedCertificates(certs);
-                setStats(statsRes.data);
-            } catch (err) {
-                console.error('Error fetching dashboard data:', err);
-                showNotification('error', 'Failed to load dashboard data. Please refresh.');
-            } finally {
-                setDataLoading(false);
-            }
-        };
         fetchData();
     }, []);
 
@@ -538,6 +539,7 @@ const AdminDashboard = () => {
             showNotification('success', `Degree claim for ${selectedPendingClaim.studentName} has been approved and issued on blockchain successfully!`);
             setShowApproveModal(false);
             setSelectedPendingClaim(null);
+            fetchData(false);
         } catch (err) {
             console.error('Error approving degree claim:', err);
             const msg = err.response?.data?.detail || 'Failed to approve degree claim.';
@@ -560,6 +562,7 @@ const AdminDashboard = () => {
             ));
 
             showNotification('success', `Certificate for ${selectedCert.studentName} has been revoked.`);
+            fetchData(false);
         } catch (err) {
             showNotification('error', err.response?.data?.detail || 'Failed to revoke certificate.');
         }
@@ -580,6 +583,7 @@ const AdminDashboard = () => {
                     : cert
             ));
             showNotification('success', `Certificate status changed to ${newStatus}.`);
+            fetchData(false);
         } catch (err) {
             showNotification('error', err.response?.data?.detail || 'Failed to change status.');
         }
@@ -600,6 +604,7 @@ const AdminDashboard = () => {
             setIssuedCertificates(prev => prev.filter(c => c.id !== certToDelete.id));
             setSelectedCertIds(prev => prev.filter(id => id !== certToDelete.id)); // also clear from selected
             showNotification('success', `Certificate for ${certToDelete.studentName} has been deleted.`);
+            fetchData(false);
         } catch (err) {
             showNotification('error', err.response?.data?.detail || 'Failed to delete certificate.');
         }
@@ -617,6 +622,7 @@ const AdminDashboard = () => {
             setIssuedCertificates(prev => prev.filter(c => !selectedCertIds.includes(c.id)));
             showNotification('success', `Successfully deleted ${count} certificates.`);
             setSelectedCertIds([]);
+            fetchData(false);
         } catch (err) {
             showNotification('error', err.response?.data?.detail || 'Failed to bulk delete certificates.');
         }
@@ -821,6 +827,7 @@ const AdminDashboard = () => {
             setErrors({});
 
             showNotification('success', 'Certificate issued successfully!');
+            fetchData(false);
             setTimeout(() => setSuccess(false), 5000);
         } catch (error) {
             console.error('Error issuing certificate:', error);
@@ -984,20 +991,8 @@ const AdminDashboard = () => {
 
             setBulkProgress(90);
 
-            // Refresh certificates list
-            const certsRes = await degreesAPI.list();
-            const certs = certsRes.data.map(cert => ({
-                id: cert.id,
-                studentName: cert.student_name,
-                studentId: cert.student_id,
-                degreeName: cert.degree_name,
-                issueDate: cert.issue_date,
-                status: cert.status?.toLowerCase() === 'issued' ? 'Issued' : cert.status?.toLowerCase() === 'revoked' ? 'Revoked' : 'Pending',
-                hash: cert.blockchain_hash || '',
-                txHash: cert.tx_hash || '',
-                revokeReason: cert.revoke_reason || '',
-            }));
-            setIssuedCertificates(certs);
+            // Refresh certificates list and stats
+            await fetchData(false);
 
             setBulkProgress(100);
             showNotification('success', response.data.message || `${csvData.length} certificates minted successfully!`);

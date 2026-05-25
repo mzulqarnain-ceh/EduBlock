@@ -28,6 +28,7 @@ export const ToastProvider = ({ children }) => {
                 removeToast(id);
             }, duration);
         }
+        return id;
     }, [removeToast]);
 
     const success = (message, duration) => showToast(message, 'success', duration);

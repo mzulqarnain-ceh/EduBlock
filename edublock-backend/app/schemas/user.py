@@ -8,6 +8,7 @@ class UserResponse(BaseModel):
     email: str
     name: str
     role: str
+    registration_no: Optional[str] = None
     university_id: Optional[int] = None
     university_name: Optional[str] = None
     wallet_address: Optional[str] = None
