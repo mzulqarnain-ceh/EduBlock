@@ -29,7 +29,7 @@ const BarChart = ({ data, title }) => {
                         <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${(item.value / maxValue) * 100}%` }}
-                            transition={{ duration: 1, delay: index * 0.1, ease: [0.4, 0, 0.2, 1] }}
+                            transition={{ duration: 0.5, delay: index * 0.06, ease: [0.4, 0, 0.2, 1] }}
                             className="h-full rounded-full"
                             style={{ background: `linear-gradient(90deg, ${item.color}, ${item.colorEnd || item.color})` }}
                         />
@@ -78,7 +78,7 @@ const DonutChart = ({ data, title, centerValue, centerLabel }) => {
                                 fill={item.color}
                                 initial={{ opacity: 0, scale: 0.8 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: index * 0.2, duration: 0.5 }}
+                                transition={{ delay: index * 0.1, duration: 0.3 }}
                                 className="hover:opacity-80 transition-opacity cursor-pointer"
                             />
                         );
@@ -96,7 +96,7 @@ const DonutChart = ({ data, title, centerValue, centerLabel }) => {
                         key={index}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.5 + index * 0.1 }}
+                        transition={{ delay: 0.25 + index * 0.06 }}
                         className="flex items-center gap-2"
                     >
                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
@@ -1023,7 +1023,7 @@ const AdminDashboard = () => {
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6 }}
+                    transition={{ duration: 0.3 }}
                 >
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">

@@ -193,37 +193,7 @@ const Navigation = ({ walletAddress, onConnectWallet, onDisconnectWallet }) => {
 
                         {user ? (
                             <div className="flex items-center gap-3 ml-4">
-                                {/* Connect Wallet button for students */}
-                                {user.role?.toLowerCase() === 'student' && (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={walletAddress ? onDisconnectWallet : onConnectWallet}
-                                        onMouseEnter={() => setIsWalletHovered(true)}
-                                        onMouseLeave={() => setIsWalletHovered(false)}
-                                        className={`transition-all duration-300 ${
-                                            walletAddress 
-                                                ? 'border-emerald-500/50 text-emerald-400 hover:border-red-500/50 hover:text-red-400 hover:bg-red-500/10' 
-                                                : 'border-amber-500 text-amber-400 hover:bg-amber-500/10'
-                                        }`}
-                                    >
-                                        {walletAddress ? (
-                                            isWalletHovered ? (
-                                                <span className="flex items-center gap-2">
-                                                    🔌 Disconnect
-                                                </span>
-                                            ) : (
-                                                <span className="flex items-center gap-2">
-                                                    🟢 {formatAddress(walletAddress)}
-                                                </span>
-                                            )
-                                        ) : (
-                                            <span className="flex items-center gap-2">
-                                                🔗 Connect Wallet
-                                            </span>
-                                        )}
-                                    </Button>
-                                )}
+
 
                                 {/* User Profile Dropdown */}
                                 <div ref={userMenuRef} className="relative">
@@ -374,37 +344,7 @@ const Navigation = ({ walletAddress, onConnectWallet, onDisconnectWallet }) => {
                                     </Link>
                                 </div>
 
-                                {user.role?.toLowerCase() === 'student' && (
-                                    <div className="px-4 mb-4">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => {
-                                                if (walletAddress) {
-                                                    onDisconnectWallet();
-                                                } else {
-                                                    onConnectWallet();
-                                                }
-                                                setIsOpen(false);
-                                            }}
-                                            className={`w-full justify-center transition-all duration-300 ${
-                                                walletAddress 
-                                                    ? 'border-emerald-500/50 text-emerald-400 hover:border-red-500/50 hover:text-red-400 hover:bg-red-500/10' 
-                                                     : 'border-amber-500 text-amber-400 hover:bg-amber-500/10'
-                                            }`}
-                                        >
-                                            {walletAddress ? (
-                                                <span className="flex items-center gap-2 justify-center">
-                                                    🟢 {formatAddress(walletAddress)} (Disconnect)
-                                                </span>
-                                            ) : (
-                                                <span className="flex items-center gap-2 justify-center">
-                                                    🔗 Connect Wallet
-                                                </span>
-                                            )}
-                                        </Button>
-                                    </div>
-                                )}
+
 
                                 <Button variant="secondary" size="sm" onClick={handleLogout} className="w-full">
                                     Logout

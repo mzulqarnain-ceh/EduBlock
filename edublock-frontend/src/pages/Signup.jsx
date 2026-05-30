@@ -167,9 +167,9 @@ const Signup = () => {
             </div>
 
             <motion.div
-                initial={{ opacity: 0, y: 30 }}
+                initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
+                transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
                 className="max-w-lg w-full mx-4 relative z-10"
             >
                 <Card className="border-white/10 hover:border-amber-500/20">
@@ -177,7 +177,7 @@ const Signup = () => {
                         <motion.div
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
-                            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                            transition={{ delay: 0.1, type: "spring", stiffness: 300 }}
                             className="w-16 h-16 bg-gradient-to-br from-amber-400 to-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/20"
                         >
                             <span className="text-3xl">✨</span>
@@ -190,9 +190,9 @@ const Signup = () => {
 
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
+                            initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.3 }}
+                            transition={{ delay: 0.15 }}
                         >
                             <label htmlFor="name" className="block text-sm font-medium mb-2 text-white/70">
                                 Full Name
@@ -213,9 +213,9 @@ const Signup = () => {
                         </motion.div>
 
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
+                            initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.35 }}
+                            transition={{ delay: 0.18 }}
                         >
                             <label htmlFor="email" className="block text-sm font-medium mb-2 text-white/70">
                                 Email Address
@@ -236,9 +236,9 @@ const Signup = () => {
                         </motion.div>
 
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
+                            initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.4 }}
+                            transition={{ delay: 0.2 }}
                         >
                             <label className="block text-sm font-medium mb-3 text-white/70">
                                 Register As
@@ -331,9 +331,9 @@ const Signup = () => {
                         )}
 
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
+                            initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.45 }}
+                            transition={{ delay: 0.22 }}
                         >
                             <label htmlFor="password" className="block text-sm font-medium mb-2 text-white/70">
                                 Password
@@ -391,9 +391,9 @@ const Signup = () => {
                         </motion.div>
 
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
+                            initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.5 }}
+                            transition={{ delay: 0.25 }}
                         >
                             <label htmlFor="confirmPassword" className="block text-sm font-medium mb-2 text-white/70">
                                 Confirm Password
@@ -454,9 +454,9 @@ const Signup = () => {
                         </motion.div>
 
                         <motion.div
-                            initial={{ opacity: 0, y: 20 }}
+                            initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.55 }}
+                            transition={{ delay: 0.28 }}
                             className="pt-2"
                         >
                             <Button

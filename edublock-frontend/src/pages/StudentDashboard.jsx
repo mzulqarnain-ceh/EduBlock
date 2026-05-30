@@ -282,14 +282,14 @@ const StudentDashboard = () => {
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6 }}
+                    transition={{ duration: 0.3 }}
                 >
                     {/* Header */}
                     <div className="mb-12">
                         <motion.div
                             initial={{ opacity: 0, y: -10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5 }}
+                            transition={{ duration: 0.25 }}
                         >
                             <h2 className="text-2xl text-white/80 mb-2">
                                 Hello, <span className="gradient-text font-semibold">{user?.name || 'Student'}!</span> 👋
@@ -395,7 +395,7 @@ const StudentDashboard = () => {
                                 key={cert.id}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.6, delay: index * 0.1 }}
+                                transition={{ duration: 0.3, delay: index * 0.05 }}
                             >
                                 <Card className="h-full flex flex-col">
                                     <div className="flex-1">

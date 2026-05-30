@@ -71,7 +71,7 @@ select option {
   border-radius: 1.5rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card:hover {
@@ -93,7 +93,7 @@ select option {
   padding: 0.75rem 1.5rem;
   border-radius: 0.75rem;
   font-weight: 600;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s ease;
   transform: scale(1);
   cursor: pointer;
   border: none;
@@ -180,7 +180,7 @@ select option {
   padding-right: 1.25rem;
   color: white;
   width: 100%;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 /* Input with left icon - give space for icon */
@@ -528,4 +528,35 @@ select.input-field {
   border-radius: 1rem !important;
   overflow: hidden !important;
   border: 2px solid rgba(251, 191, 36, 0.3) !important;
+}
+
+/* ========== Floating Background - GPU Accelerated ========== */
+.floating-item {
+  position: absolute;
+  animation: floatEmoji linear infinite;
+  will-change: transform;
+}
+
+.floating-particle {
+  position: absolute;
+  width: 0.25rem;
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: rgba(251, 191, 36, 0.2);
+  animation: floatParticle ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes floatEmoji {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); }
+  25%  { transform: translate(15px, -30px) rotate(5deg) scale(1.05); }
+  50%  { transform: translate(0, 0) rotate(0deg) scale(1); }
+  75%  { transform: translate(-15px, 30px) rotate(-5deg) scale(0.95); }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+
+@keyframes floatParticle {
+  0%   { transform: translateY(0) scale(1); opacity: 0.2; }
+  50%  { transform: translateY(-50px) scale(1.5); opacity: 0.5; }
+  100% { transform: translateY(0) scale(1); opacity: 0.2; }
 }

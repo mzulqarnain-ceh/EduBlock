@@ -134,9 +134,9 @@ const Login = ({ onLogin }) => {
             </div>
 
             <motion.div
-                initial={{ opacity: 0, y: 30 }}
+                initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
+                transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
                 className="max-w-md w-full mx-4 relative z-10"
             >
                 <Card className="border-white/10 hover:border-amber-500/20">
@@ -144,7 +144,7 @@ const Login = ({ onLogin }) => {
                         <motion.div
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
-                            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                            transition={{ delay: 0.1, type: "spring", stiffness: 300 }}
                             className="w-16 h-16 bg-gradient-to-br from-amber-400 to-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/20"
                         >
                             <span className="text-3xl">🔐</span>
@@ -157,9 +157,9 @@ const Login = ({ onLogin }) => {
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
+                            initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.3 }}
+                            transition={{ delay: 0.15 }}
                         >
                             <div className="flex justify-between items-center mb-2">
                                 <label htmlFor="email" className="block text-sm font-medium text-white/70">
@@ -182,9 +182,9 @@ const Login = ({ onLogin }) => {
                         </motion.div>
 
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
+                            initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.4 }}
+                            transition={{ delay: 0.2 }}
                         >
                             <div className="flex justify-between items-center mb-2">
                                 <label htmlFor="password" className="block text-sm font-medium text-white/70">
@@ -230,9 +230,9 @@ const Login = ({ onLogin }) => {
                         </motion.div>
 
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
+                            initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.5 }}
+                            transition={{ delay: 0.25 }}
                         >
                             <label className="block text-sm font-medium mb-3 text-white/70">
                                 Login As
@@ -272,9 +272,9 @@ const Login = ({ onLogin }) => {
 
 
                         <motion.div
-                            initial={{ opacity: 0, y: 20 }}
+                            initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.6 }}
+                            transition={{ delay: 0.3 }}
                         >
                             <Button
                                 type="submit"

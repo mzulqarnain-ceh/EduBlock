@@ -80,28 +80,28 @@ const Landing = () => {
 
     // Animation variants for different directions
     const fadeInUp = {
-        hidden: { opacity: 0, y: 60 },
-        visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.4, 0, 0.2, 1] } }
+        hidden: { opacity: 0, y: 30 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } }
     };
 
     const fadeInDown = {
-        hidden: { opacity: 0, y: -60 },
-        visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.4, 0, 0.2, 1] } }
+        hidden: { opacity: 0, y: -30 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } }
     };
 
     const fadeInLeft = {
-        hidden: { opacity: 0, x: -80 },
-        visible: { opacity: 1, x: 0, transition: { duration: 0.8, ease: [0.4, 0, 0.2, 1] } }
+        hidden: { opacity: 0, x: -40 },
+        visible: { opacity: 1, x: 0, transition: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } }
     };
 
     const fadeInRight = {
-        hidden: { opacity: 0, x: 80 },
-        visible: { opacity: 1, x: 0, transition: { duration: 0.8, ease: [0.4, 0, 0.2, 1] } }
+        hidden: { opacity: 0, x: 40 },
+        visible: { opacity: 1, x: 0, transition: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } }
     };
 
     const scaleIn = {
-        hidden: { opacity: 0, scale: 0.8 },
-        visible: { opacity: 1, scale: 1, transition: { duration: 0.8, ease: [0.4, 0, 0.2, 1] } }
+        hidden: { opacity: 0, scale: 0.9 },
+        visible: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] } }
     };
 
     const staggerContainer = {
@@ -109,18 +109,18 @@ const Landing = () => {
         visible: {
             opacity: 1,
             transition: {
-                staggerChildren: 0.15,
-                delayChildren: 0.1,
+                staggerChildren: 0.08,
+                delayChildren: 0.05,
             },
         },
     };
 
     const staggerItem = {
-        hidden: { opacity: 0, y: 40 },
+        hidden: { opacity: 0, y: 20 },
         visible: {
             opacity: 1,
             y: 0,
-            transition: { duration: 0.6, ease: [0.4, 0, 0.2, 1] },
+            transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] },
         },
     };
 
@@ -128,13 +128,13 @@ const Landing = () => {
     const getFeatureVariant = (index) => {
         if (index % 2 === 0) {
             return {
-                hidden: { opacity: 0, x: -60, rotate: -3 },
-                visible: { opacity: 1, x: 0, rotate: 0, transition: { duration: 0.7, ease: [0.4, 0, 0.2, 1], delay: index * 0.1 } }
+                hidden: { opacity: 0, x: -30, rotate: -2 },
+                visible: { opacity: 1, x: 0, rotate: 0, transition: { duration: 0.35, ease: [0.4, 0, 0.2, 1], delay: index * 0.06 } }
             };
         }
         return {
-            hidden: { opacity: 0, x: 60, rotate: 3 },
-            visible: { opacity: 1, x: 0, rotate: 0, transition: { duration: 0.7, ease: [0.4, 0, 0.2, 1], delay: index * 0.1 } }
+            hidden: { opacity: 0, x: 30, rotate: 2 },
+            visible: { opacity: 1, x: 0, rotate: 0, transition: { duration: 0.35, ease: [0.4, 0, 0.2, 1], delay: index * 0.06 } }
         };
     };
 
@@ -145,15 +145,15 @@ const Landing = () => {
                 {/* Animated Background Elements */}
                 <div className="absolute inset-0 overflow-hidden">
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.5 }}
+                        initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 1.5, ease: "easeOut" }}
+                        transition={{ duration: 0.5, ease: "easeOut" }}
                         className="absolute top-20 left-10 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl animate-float"
                     ></motion.div>
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.5 }}
+                        initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 1.5, delay: 0.3, ease: "easeOut" }}
+                        transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
                         className="absolute bottom-20 right-10 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl animate-float"
                         style={{ animationDelay: '2s' }}
                     ></motion.div>
@@ -314,7 +314,7 @@ const Landing = () => {
                             initial={{ scaleX: 0 }}
                             whileInView={{ scaleX: 1 }}
                             viewport={{ once: true }}
-                            transition={{ duration: 1, delay: 0.5 }}
+                            transition={{ duration: 0.5, delay: 0.3 }}
                             className="hidden md:block absolute top-1/2 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-500/20 via-emerald-500/40 to-amber-500/20 -translate-y-1/2 origin-left"
                         ></motion.div>
 

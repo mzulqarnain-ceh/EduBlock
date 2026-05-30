@@ -157,7 +157,7 @@ const ContactUs = () => {
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6 }}
+                    transition={{ duration: 0.3 }}
                     className="max-w-4xl mx-auto"
                 >
                     {/* Header */}
@@ -165,7 +165,7 @@ const ContactUs = () => {
                         <motion.div
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
-                            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                            transition={{ delay: 0.1, type: "spring", stiffness: 300 }}
                             className="w-16 h-16 bg-gradient-to-br from-amber-400 to-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/20"
                         >
                             <span className="text-3xl">💬</span>
@@ -219,9 +219,9 @@ const ContactUs = () => {
 
                                 <form onSubmit={handleSubmit} className="space-y-5">
                                     <motion.div
-                                        initial={{ opacity: 0, x: -20 }}
+                                        initial={{ opacity: 0, x: -10 }}
                                         animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: 0.3 }}
+                                        transition={{ delay: 0.15 }}
                                     >
                                         <label htmlFor="name" className="block text-sm font-medium mb-2 text-white/70">
                                             Your Name
@@ -240,11 +240,10 @@ const ContactUs = () => {
                                             />
                                         </div>
                                     </motion.div>
-
                                     <motion.div
-                                        initial={{ opacity: 0, x: -20 }}
+                                        initial={{ opacity: 0, x: -10 }}
                                         animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: 0.35 }}
+                                        transition={{ delay: 0.18 }}
                                     >
                                         <label htmlFor="email" className="block text-sm font-medium mb-2 text-white/70">
                                             Email Address
@@ -267,7 +266,7 @@ const ContactUs = () => {
                                     <motion.div
                                         initial={{ opacity: 0, x: -20 }}
                                         animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: 0.4 }}
+                                        transition={{ delay: 0.2 }}
                                     >
                                         <label htmlFor="subject" className="block text-sm font-medium mb-2 text-white/70">
                                             Subject
@@ -290,7 +289,7 @@ const ContactUs = () => {
                                     <motion.div
                                         initial={{ opacity: 0, x: -20 }}
                                         animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: 0.45 }}
+                                        transition={{ delay: 0.22 }}
                                     >
                                         <label htmlFor="message" className="block text-sm font-medium mb-2 text-white/70">
                                             Message
@@ -313,7 +312,7 @@ const ContactUs = () => {
                                     <motion.div
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: 0.5 }}
+                                        transition={{ delay: 0.25 }}
                                     >
                                         <Button
                                             type="submit"
@@ -353,7 +352,7 @@ const ContactUs = () => {
                                         key={index}
                                         initial={{ opacity: 0, x: 20 }}
                                         animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: 0.3 + index * 0.1 }}
+                                        transition={{ delay: 0.15 + index * 0.06 }}
                                         className={`flex items-start gap-4 ${index < contactInfo.length - 1 ? 'mb-6 pb-6 border-b border-white/10' : ''}`}
                                     >
                                         <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-emerald-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-amber-500/20">
@@ -384,7 +383,7 @@ const ContactUs = () => {
                                             key={index}
                                             initial={{ opacity: 0, x: 20 }}
                                             animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: 0.5 + index * 0.1 }}
+                                            transition={{ delay: 0.25 + index * 0.06 }}
                                             className="flex items-center gap-3 text-white/60 text-sm hover:text-amber-400 transition-colors cursor-pointer group"
                                         >
                                             <span className="w-6 h-6 bg-amber-500/10 rounded-md flex items-center justify-center text-xs group-hover:bg-amber-500/20 transition-colors">
