@@ -20,40 +20,6 @@ import Toast from './components/Toast';
 import ProtectedRoute from './components/ProtectedRoute';
 import { universitiesAPI } from './services/api';
 
-function ColdStartHandler() {
-  const { showToast, removeToast } = useToast();
-  const activeToastRef = useRef(null);
-
-  useEffect(() => {
-    const handleLongRequest = () => {
-      if (!activeToastRef.current) {
-        const toastId = showToast(
-          "Connecting to EduBlock network... The backend node is waking up from standby (cold start). This may take up to 30 seconds.",
-          "info",
-          15000
-        );
-        activeToastRef.current = toastId;
-      }
-    };
-
-    const handleLongRequestFinished = () => {
-      if (activeToastRef.current) {
-        removeToast(activeToastRef.current);
-        activeToastRef.current = null;
-      }
-    };
-
-    window.addEventListener('apiLongRequest', handleLongRequest);
-    window.addEventListener('apiLongRequestFinished', handleLongRequestFinished);
-
-    return () => {
-      window.removeEventListener('apiLongRequest', handleLongRequest);
-      window.removeEventListener('apiLongRequestFinished', handleLongRequestFinished);
-    };
-  }, [showToast, removeToast]);
-
-  return null;
-}
 
 function App() {
   const [walletAddress, setWalletAddress] = useState('');
@@ -133,7 +99,6 @@ function App() {
   return (
     <Router>
       <ToastProvider>
-        <ColdStartHandler />
         <div className="min-h-screen relative">
           {/* Scroll to top on route change */}
           <ScrollToTop />
